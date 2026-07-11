@@ -37,3 +37,17 @@ docs: add business requirements document
 
 ### Git Commit
 docs: add software requirements specification
+
+
+## Day 5
+
+Date: 10 July 2026
+
+Completed:
+- Created System Architecture document.
+- Defined complete platform architecture.
+- Documented frontend, backend, AI and database layers.
+- Added deployment and scalability planning.
+
+Status:
+✅ Completed
