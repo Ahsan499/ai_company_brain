@@ -2,25 +2,21 @@
 
 namespace App\Http\Controllers\Api;
 
-use App\Traits\ApiResponse;
-use App\Services\AuthService;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Auth\LoginRequest;
 use App\Http\Requests\Auth\RegisterRequest;
+use App\Http\Resources\Auth\UserResource;
+use App\Services\AuthService;
+use App\Traits\ApiResponse;
 use Illuminate\Http\Request;
+use Throwable;
 
 class AuthController extends Controller
 {
     use ApiResponse;
 
-    /**
-     * Auth Service Instance
-     */
     protected AuthService $authService;
 
-    /**
-     * Constructor
-     */
     public function __construct(AuthService $authService)
     {
         $this->authService = $authService;
@@ -31,7 +27,23 @@ class AuthController extends Controller
      */
     public function register(RegisterRequest $request)
     {
-        return $this->authService->register($request);
+        try {
+
+            $result = $this->authService->register($request->validated());
+
+            return $this->successResponse([
+                'user'  => new UserResource($result['user']),
+                'token' => $result['token'],
+            ], 'User registered successfully.', 201);
+
+        } catch (Throwable $e) {
+
+            return $this->errorResponse(
+                $e->getMessage(),
+                500
+            );
+
+        }
     }
 
     /**
@@ -39,7 +51,23 @@ class AuthController extends Controller
      */
     public function login(LoginRequest $request)
     {
-        return $this->authService->login($request);
+        try {
+
+            $result = $this->authService->login($request->validated());
+
+            return $this->successResponse([
+                'user'  => new UserResource($result['user']),
+                'token' => $result['token'],
+            ], 'Login successful.');
+
+        } catch (Throwable $e) {
+
+            return $this->errorResponse(
+                $e->getMessage(),
+                401
+            );
+
+        }
     }
 
     /**
@@ -47,14 +75,24 @@ class AuthController extends Controller
      */
     public function logout(Request $request)
     {
-        return $this->authService->logout($request->user());
+        $this->authService->logout($request->user());
+
+        return $this->successResponse(
+            [],
+            'Logout successful.'
+        );
     }
 
     /**
-     * Current User
+     * Current Authenticated User
      */
     public function me(Request $request)
     {
-        return $this->authService->me($request->user());
+        $user = $this->authService->me($request->user());
+
+        return $this->successResponse(
+            new UserResource($user),
+            'Authenticated user.'
+        );
     }
 }
