@@ -8,6 +8,7 @@ use Illuminate\Notifications\Notifiable;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use App\Models\Organization;
+use App\Models\Department;
 
 class User extends Authenticatable
 {
@@ -20,6 +21,7 @@ class User extends Authenticatable
      */
    protected $fillable = [
     'organization_id',
+    'department_id',
     'first_name',
     'last_name',
     'email',
@@ -60,5 +62,10 @@ class User extends Authenticatable
     public function organization()
     {
         return $this->belongsTo(Organization::class);
+    }   
+
+    public function department()
+    {
+        return $this->belongsTo(Department::class);
     }   
 }

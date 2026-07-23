@@ -4,6 +4,7 @@ use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\OrganizationController;
 use App\Http\Controllers\UserController;
+use App\Http\Controllers\DepartmentController;
 /*
 |--------------------------------------------------------------------------
 | Public Routes
@@ -27,5 +28,6 @@ Route::middleware('auth:sanctum')->group(function () {
 
     Route::apiResource('organizations', OrganizationController::class);
     Route::apiResource('users', UserController::class);
+    Route::apiResource('departments', DepartmentController::class);
 
 });
