@@ -5,6 +5,8 @@ use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\OrganizationController;
 use App\Http\Controllers\UserController;
 use App\Http\Controllers\DepartmentController;
+use App\Http\Controllers\ProjectController;
+
 /*
 |--------------------------------------------------------------------------
 | Public Routes
@@ -29,5 +31,6 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::apiResource('organizations', OrganizationController::class);
     Route::apiResource('users', UserController::class);
     Route::apiResource('departments', DepartmentController::class);
+    Route::apiResource('projects', ProjectController::class);
 
 });

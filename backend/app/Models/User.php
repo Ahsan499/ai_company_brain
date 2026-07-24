@@ -9,6 +9,7 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use App\Models\Organization;
 use App\Models\Department;
+use App\Models\Project;
 
 class User extends Authenticatable
 {
@@ -68,4 +69,10 @@ class User extends Authenticatable
     {
         return $this->belongsTo(Department::class);
     }   
+    
+    public function projects()
+    {
+        return $this->belongsToMany(Project::class)
+            ->withTimestamps();
+    }
 }

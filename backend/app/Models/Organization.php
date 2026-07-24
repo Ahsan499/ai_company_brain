@@ -6,6 +6,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use App\Models\Department;
 use App\Models\User;
+use App\Models\Project;
 
 class Organization extends Model
 {
@@ -33,5 +34,10 @@ class Organization extends Model
     public function departments()
     {
         return $this->hasMany(Department::class);
+    }
+
+    public function projects()  
+    {
+        return $this->hasMany(Project::class);
     }
 }
