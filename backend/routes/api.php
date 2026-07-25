@@ -11,6 +11,7 @@ use App\Http\Controllers\Api\TeamController;
 use App\Http\Controllers\Api\MeetingController;
 use App\Http\Controllers\Api\TimeEntryController;
 use App\Http\Controllers\Api\AttachmentController;
+use App\Http\Controllers\Api\NotificationController;
 
 /*
 |--------------------------------------------------------------------------
@@ -44,4 +45,21 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('time-entries/start', [TimeEntryController::class, 'start']);
     Route::post('time-entries/{id}/stop', [TimeEntryController::class, 'stop']);
     Route::apiResource('attachments', AttachmentController::class);
+
+    Route::apiResource('notifications', NotificationController::class);
+
+    Route::put(
+    'notifications/{id}/mark-read',
+    [NotificationController::class, 'markAsRead']
+    );
+
+    Route::put(
+    'notifications/user/{userId}/mark-all-read',
+    [NotificationController::class, 'markAllAsRead']
+    );
+
+    Route::get(
+    'notifications/user/{userId}/unread-count',
+    [NotificationController::class, 'unreadCount']
+    );
 });
