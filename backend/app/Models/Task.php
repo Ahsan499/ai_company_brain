@@ -5,30 +5,30 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 
-class Project extends Model
+class Task extends Model
 {
     use HasFactory;
 
     protected $fillable = [
         'organization_id',
         'department_id',
-        'name',
-        'slug',
+        'project_id',
+        'assigned_to',
+        'title',
         'description',
-        'start_date',
-        'end_date',
         'status',
+        'priority',
+        'due_date',
         'is_active',
     ];
 
     protected $casts = [
-        'start_date' => 'date',
-        'end_date' => 'date',
+        'due_date' => 'date',
         'is_active' => 'boolean',
     ];
 
     /**
-     * Project belongs to an Organization.
+     * Task belongs to Organization.
      */
     public function organization()
     {
@@ -36,7 +36,7 @@ class Project extends Model
     }
 
     /**
-     * Project belongs to a Department.
+     * Task belongs to Department.
      */
     public function department()
     {
@@ -44,16 +44,18 @@ class Project extends Model
     }
 
     /**
-     * Project has many Users.
+     * Task belongs to Project.
      */
-    public function users()
+    public function project()
     {
-        return $this->belongsToMany(User::class)
-            ->withTimestamps();
+        return $this->belongsTo(Project::class);
     }
 
-    public function tasks()
+    /**
+     * Assigned User.
+     */
+    public function assignedUser()
     {
-        return $this->hasMany(Task::class);
+        return $this->belongsTo(User::class, 'assigned_to');
     }
 }
