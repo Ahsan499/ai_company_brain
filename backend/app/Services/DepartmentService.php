@@ -4,21 +4,29 @@ namespace App\Services;
 
 use App\Http\Resources\Department\DepartmentResource;
 use App\Models\Department;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 
 class DepartmentService
 {
+    protected SearchService $searchService;
+
+    public function __construct(SearchService $searchService)
+    {
+        $this->searchService = $searchService;
+    }
+
     /**
      * Display all departments.
      */
-    public function index()
+    public function index(Request $request)
     {
-        $departments = Department::with('organization')
-            ->latest()
-            ->paginate(10);
+        $query = Department::with('organization');
 
-        return DepartmentResource::collection($departments);
+        return DepartmentResource::collection(
+            $this->searchService->apply($query, $request)
+        );
     }
 
     /**

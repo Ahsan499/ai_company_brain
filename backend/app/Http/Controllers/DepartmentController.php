@@ -7,6 +7,7 @@ use App\Http\Requests\Department\UpdateDepartmentRequest;
 use App\Services\DepartmentService;
 use App\Traits\ApiResponse;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Http\Request;
 
 class DepartmentController extends Controller
 {
@@ -22,15 +23,22 @@ class DepartmentController extends Controller
     /**
      * Display all departments.
      */
-    public function index(): JsonResponse
-    {
-        $departments = $this->departmentService->index();
+    // public function index(): JsonResponse
+    // {
+    //     $departments = $this->departmentService->index();
 
-        return $this->successResponse(
-            $departments,
-            'Departments retrieved successfully.'
-        );
-    }
+    //     return $this->successResponse(
+    //         $departments,
+    //         'Departments retrieved successfully.'
+    //     );
+    // }
+    public function index(Request $request): JsonResponse
+{
+    return $this->successResponse(
+        $this->departmentService->index($request),
+        'Departments retrieved successfully.'
+    );
+}
 
     /**
      * Store a newly created department.

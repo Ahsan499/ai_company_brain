@@ -7,6 +7,7 @@ use App\Http\Requests\Task\UpdateTaskRequest;
 use App\Services\TaskService;
 use App\Traits\ApiResponse;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Http\Request;
 
 class TaskController extends Controller
 {
@@ -22,15 +23,22 @@ class TaskController extends Controller
     /**
      * Display all tasks.
      */
-    public function index(): JsonResponse
-    {
-        $tasks = $this->taskService->index();
+    // public function index(): JsonResponse
+    // {
+    //     $tasks = $this->taskService->index();
 
-        return $this->successResponse(
-            $tasks,
-            'Tasks retrieved successfully.'
-        );
-    }
+    //     return $this->successResponse(
+    //         $tasks,
+    //         'Tasks retrieved successfully.'
+    //     );
+    // }
+    public function index(Request $request): JsonResponse
+{
+    return $this->successResponse(
+        $this->taskService->index($request),
+        'Tasks retrieved successfully.'
+    );
+}
 
     /**
      * Store a newly created task.

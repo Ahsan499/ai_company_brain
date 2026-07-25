@@ -4,22 +4,32 @@ namespace App\Services;
 
 use App\Http\Resources\Meeting\MeetingResource;
 use App\Models\Meeting;
+use Illuminate\Http\Request;
 
 class MeetingService
 {
+    protected SearchService $searchService;
+
+    public function __construct(SearchService $searchService)
+    {
+        $this->searchService = $searchService;
+    }
+
     /**
      * Display all meetings.
      */
-    public function index()
+    public function index(Request $request)
     {
-        $meetings = Meeting::with([
+        $query = Meeting::with([
             'organization',
             'department',
             'project',
             'team',
-        ])->latest()->paginate(10);
+        ]);
 
-        return MeetingResource::collection($meetings);
+        return MeetingResource::collection(
+            $this->searchService->apply($query, $request)
+        );
     }
 
     /**

@@ -22,15 +22,27 @@ class ProjectController extends Controller
     /**
      * Display all projects.
      */
-    public function index(): JsonResponse
-    {
-        $projects = $this->projectService->index();
+    // public function index(): JsonResponse
+    // {
+    //     $projects = $this->projectService->index();
 
-        return $this->successResponse(
-            $projects,
-            'Projects retrieved successfully.'
-        );
-    }
+    //     return $this->successResponse(
+    //         $projects,
+    //         'Projects retrieved successfully.'
+    //     );
+    // }
+    public function index(Request $request)
+{
+    $query = Project::with([
+        'organization',
+        'department',
+        'members'
+    ]);
+
+    return ProjectResource::collection(
+        $this->searchService->apply($query, $request)
+    );
+}
 
     /**
      * Store a newly created project.

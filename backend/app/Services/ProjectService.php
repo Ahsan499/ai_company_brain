@@ -4,23 +4,33 @@ namespace App\Services;
 
 use App\Http\Resources\Project\ProjectResource;
 use App\Models\Project;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 
 class ProjectService
 {
+    protected SearchService $searchService;
+
+    public function __construct(SearchService $searchService)
+    {
+        $this->searchService = $searchService;
+    }
+
     /**
      * Display all projects.
      */
-    public function index()
+    public function index(Request $request)
     {
-        $projects = Project::with([
+        $query = Project::with([
             'organization',
             'department',
             'users'
-        ])->latest()->paginate(10);
+        ]);
 
-        return ProjectResource::collection($projects);
+        return ProjectResource::collection(
+            $this->searchService->apply($query, $request)
+        );
     }
 
     /**

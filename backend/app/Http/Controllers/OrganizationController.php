@@ -7,6 +7,7 @@ use App\Http\Requests\Organization\UpdateOrganizationRequest;
 use App\Services\OrganizationService;
 use App\Traits\ApiResponse;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Http\Request;
 
 class OrganizationController extends Controller
 {
@@ -22,12 +23,20 @@ class OrganizationController extends Controller
     /**
      * Display all organizations.
      */
-    public function index(): JsonResponse
-    {
-        $organizations = $this->organizationService->index();
+    // public function index(): JsonResponse
+    // {
+    //     $organizations = $this->organizationService->index();
 
+    //     return $this->successResponse(
+    //         $organizations,
+    //         'Organizations retrieved successfully.'
+    //     );
+    // }
+
+    public function index(Request $request): JsonResponse
+    {
         return $this->successResponse(
-            $organizations,
+            $this->organizationService->index($request),
             'Organizations retrieved successfully.'
         );
     }

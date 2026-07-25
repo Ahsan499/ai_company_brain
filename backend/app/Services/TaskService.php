@@ -4,22 +4,32 @@ namespace App\Services;
 
 use App\Http\Resources\Task\TaskResource;
 use App\Models\Task;
+use Illuminate\Http\Request;
 
 class TaskService
 {
+    protected SearchService $searchService;
+
+    public function __construct(SearchService $searchService)
+    {
+        $this->searchService = $searchService;
+    }
+
     /**
      * Display all tasks.
      */
-    public function index()
+    public function index(Request $request)
     {
-        $tasks = Task::with([
+        $query = Task::with([
             'organization',
             'department',
             'project',
             'assignedUser'
-        ])->latest()->paginate(10);
+        ]);
 
-        return TaskResource::collection($tasks);
+        return TaskResource::collection(
+            $this->searchService->apply($query, $request)
+        );
     }
 
     /**

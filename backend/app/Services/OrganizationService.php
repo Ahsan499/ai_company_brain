@@ -4,19 +4,28 @@ namespace App\Services;
 
 use App\Http\Resources\Organization\OrganizationResource;
 use App\Models\Organization;
-use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
+use Illuminate\Http\Request;
 
 class OrganizationService
 {
+    protected SearchService $searchService;
+
+    public function __construct(SearchService $searchService)
+    {
+        $this->searchService = $searchService;
+    }
+
     /**
      * Get all organizations.
      */
-    public function index()
+    public function index(Request $request)
     {
+        $query = Organization::query();
+
         return OrganizationResource::collection(
-            Organization::latest()->paginate(10)
+            $this->searchService->apply($query, $request)
         );
     }
 

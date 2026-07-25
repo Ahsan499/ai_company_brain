@@ -8,6 +8,8 @@ use App\Http\Requests\Meeting\UpdateMeetingRequest;
 use App\Services\MeetingService;
 use App\Traits\ApiResponse;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Http\Request;
+
 
 class MeetingController extends Controller
 {
@@ -23,13 +25,25 @@ class MeetingController extends Controller
     /**
      * Display all meetings.
      */
-    public function index(): JsonResponse
-    {
-        return $this->successResponse(
-            $this->meetingService->index(),
-            'Meetings retrieved successfully.'
-        );
-    }
+    // public function index(): JsonResponse
+    // {
+    //     return $this->successResponse(
+    //         $this->meetingService->index(),
+    //         'Meetings retrieved successfully.'
+    //     );
+    // }
+    public function index(Request $request)
+{
+    $query = Meeting::with([
+        'organization',
+        'department',
+        'project'
+    ]);
+
+    return MeetingResource::collection(
+        $this->searchService->apply($query, $request)
+    );
+}
 
     /**
      * Store a newly created meeting.
