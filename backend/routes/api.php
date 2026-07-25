@@ -12,6 +12,7 @@ use App\Http\Controllers\Api\MeetingController;
 use App\Http\Controllers\Api\TimeEntryController;
 use App\Http\Controllers\Api\AttachmentController;
 use App\Http\Controllers\Api\NotificationController;
+use App\Http\Controllers\Api\DashboardController;
 
 /*
 |--------------------------------------------------------------------------
@@ -62,4 +63,7 @@ Route::middleware('auth:sanctum')->group(function () {
     'notifications/user/{userId}/unread-count',
     [NotificationController::class, 'unreadCount']
     );
+    
+    Route::get('/dashboard', [DashboardController::class, 'index']);
+    
 });
