@@ -13,7 +13,7 @@ use App\Http\Controllers\Api\TimeEntryController;
 use App\Http\Controllers\Api\AttachmentController;
 use App\Http\Controllers\Api\NotificationController;
 use App\Http\Controllers\Api\DashboardController;
-
+use App\Http\Controllers\Api\AuditLogController;
 /*
 |--------------------------------------------------------------------------
 | Public Routes
@@ -65,5 +65,6 @@ Route::middleware('auth:sanctum')->group(function () {
     );
     
     Route::get('/dashboard', [DashboardController::class, 'index']);
+    Route::get('/audit-logs', [AuditLogController::class, 'index']);
     
 });

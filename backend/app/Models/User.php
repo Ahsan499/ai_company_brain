@@ -10,6 +10,7 @@ use Illuminate\Foundation\Auth\User as Authenticatable;
 use App\Models\Organization;
 use App\Models\Department;
 use App\Models\Project;
+use App\Models\AuditLog;
 
 class User extends Authenticatable
 {
@@ -89,5 +90,10 @@ class User extends Authenticatable
     public function notifications()
     {
         return $this->hasMany(Notification::class);
+    }
+
+    public function auditLogs()
+    {
+        return $this->hasMany(AuditLog::class);
     }
 }

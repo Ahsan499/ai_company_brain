@@ -11,10 +11,14 @@ use Illuminate\Http\Request;
 class OrganizationService
 {
     protected SearchService $searchService;
+    protected AuditLogService $auditLogService;
 
-    public function __construct(SearchService $searchService)
-    {
+    public function __construct(
+        SearchService $searchService,
+        AuditLogService $auditLogService
+    ) {
         $this->searchService = $searchService;
+        $this->auditLogService = $auditLogService;
     }
 
     /**
@@ -42,6 +46,14 @@ class OrganizationService
 
             $organization = Organization::create($data);
 
+            // Audit Log
+            $this->auditLogService->log(
+                'created',
+                $organization,
+                null,
+                $organization->toArray()
+            );
+
             return new OrganizationResource($organization);
         });
     }
@@ -65,11 +77,22 @@ class OrganizationService
 
             $organization = Organization::findOrFail($id);
 
+            // Save old values
+            $oldValues = $organization->toArray();
+
             if (empty($data['slug'])) {
                 $data['slug'] = Str::slug($data['name']);
             }
 
             $organization->update($data);
+
+            // Audit Log
+            $this->auditLogService->log(
+                'updated',
+                $organization,
+                $oldValues,
+                $organization->fresh()->toArray()
+            );
 
             return new OrganizationResource($organization);
         });
@@ -81,6 +104,17 @@ class OrganizationService
     public function destroy($id)
     {
         $organization = Organization::findOrFail($id);
+
+        // Save old values
+        $oldValues = $organization->toArray();
+
+        // Audit Log
+        $this->auditLogService->log(
+            'deleted',
+            $organization,
+            $oldValues,
+            null
+        );
 
         $organization->delete();
 
