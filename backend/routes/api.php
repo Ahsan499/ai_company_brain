@@ -10,6 +10,7 @@ use App\Http\Controllers\TaskController;
 use App\Http\Controllers\Api\TeamController;
 use App\Http\Controllers\Api\MeetingController;
 use App\Http\Controllers\Api\TimeEntryController;
+use App\Http\Controllers\Api\AttachmentController;
 
 /*
 |--------------------------------------------------------------------------
@@ -42,4 +43,5 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::apiResource('time-entries', TimeEntryController::class);
     Route::post('time-entries/start', [TimeEntryController::class, 'start']);
     Route::post('time-entries/{id}/stop', [TimeEntryController::class, 'stop']);
+    Route::apiResource('attachments', AttachmentController::class);
 });
