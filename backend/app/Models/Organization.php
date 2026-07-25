@@ -36,12 +36,17 @@ class Organization extends Model
         return $this->hasMany(Department::class);
     }
 
-    public function projects()  
+    public function projects()
     {
         return $this->hasMany(Project::class);
     }
     public function tasks()
-{
-    return $this->hasMany(Task::class);
-}
+    {
+        return $this->hasMany(Task::class);
+    }
+
+    public function teams()
+    {
+        return $this->hasMany(Team::class);
+    }
 }

@@ -5,12 +5,13 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 
-class Department extends Model
+class Team extends Model
 {
     use HasFactory;
 
     protected $fillable = [
         'organization_id',
+        'department_id',
         'name',
         'slug',
         'description',
@@ -21,29 +22,23 @@ class Department extends Model
         'is_active' => 'boolean',
     ];
 
-    /**
-     * Department belongs to an Organization.
-     */
     public function organization()
     {
         return $this->belongsTo(Organization::class);
     }
 
-    /**
-     * Department has many Users.
-     */
+    public function department()
+    {
+        return $this->belongsTo(Department::class);
+    }
+
     public function users()
     {
-        return $this->hasMany(User::class);
+        return $this->belongsToMany(User::class);
     }
 
-    public function tasks()
+    public function projects()
     {
-        return $this->hasMany(Task::class);
+        return $this->belongsToMany(Project::class);
     }
-
-    public function teams()
-    {
-        return $this->hasMany(Team::class);
-    }    
 }

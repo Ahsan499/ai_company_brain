@@ -7,6 +7,7 @@ use App\Http\Controllers\UserController;
 use App\Http\Controllers\DepartmentController;
 use App\Http\Controllers\ProjectController;
 use App\Http\Controllers\TaskController;
+use App\Http\Controllers\Api\TeamController;
 
 /*
 |--------------------------------------------------------------------------
@@ -33,6 +34,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::apiResource('users', UserController::class);
     Route::apiResource('departments', DepartmentController::class);
     Route::apiResource('projects', ProjectController::class);
-     Route::apiResource('tasks', TaskController::class);
+    Route::apiResource('tasks', TaskController::class);
+    Route::apiResource('teams', TeamController::class);
 
 });
