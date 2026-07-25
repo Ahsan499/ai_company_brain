@@ -5,20 +5,27 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 
-class Team extends Model
+class Meeting extends Model
 {
     use HasFactory;
 
     protected $fillable = [
         'organization_id',
         'department_id',
-        'name',
-        'slug',
+        'project_id',
+        'team_id',
+        'title',
         'description',
+        'meeting_date',
+        'start_time',
+        'end_time',
+        'location',
+        'status',
         'is_active',
     ];
 
     protected $casts = [
+        'meeting_date' => 'date',
         'is_active' => 'boolean',
     ];
 
@@ -32,19 +39,13 @@ class Team extends Model
         return $this->belongsTo(Department::class);
     }
 
-    public function users()
+    public function project()
     {
-        return $this->belongsToMany(User::class);
+        return $this->belongsTo(Project::class);
     }
 
-    public function projects()
+    public function team()
     {
-        return $this->belongsToMany(Project::class);
+        return $this->belongsTo(Team::class);
     }
-
-    public function meetings()
-    {
-        return $this->hasMany(Meeting::class);
-    }
-    
 }

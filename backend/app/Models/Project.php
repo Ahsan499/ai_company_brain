@@ -61,4 +61,9 @@ class Project extends Model
     {
         return $this->belongsToMany(Team::class);
     }   
+
+    public function meetings()
+    {
+        return $this->hasMany(Meeting::class);
+    }
 }

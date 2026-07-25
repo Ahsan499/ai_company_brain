@@ -46,4 +46,9 @@ class Department extends Model
     {
         return $this->hasMany(Team::class);
     }    
+
+    public function meetings()
+    {
+        return $this->hasMany(Meeting::class);
+    }
 }
