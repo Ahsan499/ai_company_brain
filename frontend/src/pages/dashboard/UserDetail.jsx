@@ -16,6 +16,10 @@ import {
   UserRound,
   UserX,
   Users2,
+  UsersRound,
+  Video,
+  Timer,
+  FileText,
 } from 'lucide-react';
 import Button from '../../components/ui/Button';
 import EmptyState from '../../components/dashboard/EmptyState';
@@ -24,12 +28,30 @@ import RoleBadge from '../../components/users/RoleBadge';
 import StatusBadge from '../../components/users/StatusBadge';
 import ProjectCard from '../../components/projects/ProjectCard';
 import TaskRow from '../../components/tasks/TaskRow';
+import FileTypeIcon from '../../components/files/FileTypeIcon';
 import {
   getUserById,
   formatJoinedDate,
 } from '../../components/users/userData';
 import { getProjectsByUser } from '../../components/projects/projectData';
 import { getTasksByAssignee } from '../../components/tasks/taskData';
+import {
+  getTeamsByUser,
+  getTeamsLedByUser,
+} from '../../components/teams/teamData';
+import MeetingRow from '../../components/meetings/MeetingRow';
+import {
+  getMeetingsByUser,
+  REFERENCE_TODAY,
+} from '../../components/meetings/meetingData';
+import {
+  formatHours,
+  getUserWeekMinutes,
+} from '../../components/time-tracking/timeEntryData';
+import {
+  formatFileDate,
+  getFilesByUploader,
+} from '../../components/files/fileData';
 
 const TABS = [
   { id: 'overview', label: 'Overview' },
@@ -64,6 +86,36 @@ const UserDetail = () => {
     () => (user ? getProjectsByUser(user.id) : []),
     [user]
   );
+
+  const userTeams = useMemo(
+    () => (user ? getTeamsByUser(user.id) : []),
+    [user]
+  );
+
+  const ledTeams = useMemo(
+    () => (user ? getTeamsLedByUser(user.id) : []),
+    [user]
+  );
+
+  const upcomingMeetings = useMemo(() => {
+    if (!user) return [];
+    return getMeetingsByUser(user.id)
+      .filter(
+        (m) =>
+          m.status !== 'cancelled' &&
+          (m.date > REFERENCE_TODAY ||
+            (m.date === REFERENCE_TODAY && m.status !== 'completed'))
+      )
+      .sort((a, b) => `${a.date}${a.startTime}`.localeCompare(`${b.date}${b.startTime}`))
+      .slice(0, 5);
+  }, [user]);
+
+  const recentUploads = useMemo(() => {
+    if (!user) return [];
+    return [...getFilesByUploader(user.id)]
+      .sort((a, b) => b.uploadedAt.localeCompare(a.uploadedAt))
+      .slice(0, 5);
+  }, [user]);
 
   const baseTasks = useMemo(
     () => (user ? getTasksByAssignee(user.id) : []),
@@ -154,8 +206,8 @@ const UserDetail = () => {
                   <Mail size={13} className="shrink-0 text-slate-400" />
                   {user.email}
                 </p>
-                <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-[12px] text-secondaryText">
-                  <span>{user.department} · {user.team}</span>
+                <div className="mt-2 flex flex-wrap gap-x-4 gap-y-2 text-[12px] text-secondaryText">
+                  <span>{user.department}</span>
                   <Link
                     to={`/dashboard/organizations/${user.organizationId}`}
                     className="inline-flex items-center gap-1 font-medium text-heading hover:text-primary"
@@ -164,6 +216,27 @@ const UserDetail = () => {
                     {user.organizationName}
                   </Link>
                 </div>
+                {(userTeams.length > 0 || ledTeams.length > 0) && (
+                  <div className="mt-2.5 flex flex-wrap items-center gap-1.5">
+                    <UsersRound size={12} className="text-slate-400 shrink-0" />
+                    {userTeams.map((t) => {
+                      const isLead = ledTeams.some((l) => l.id === t.id);
+                      return (
+                        <Link
+                          key={t.id}
+                          to={`/dashboard/teams/${t.id}`}
+                          className={
+                            isLead
+                              ? 'rounded-md bg-amber-50 px-2 py-0.5 text-[11px] font-semibold text-amber-700 ring-1 ring-amber-500/15 hover:bg-amber-100/80'
+                              : 'rounded-md bg-primary/5 px-2 py-0.5 text-[11px] font-semibold text-primary ring-1 ring-primary/10 hover:bg-primary/10'
+                          }
+                        >
+                          {isLead ? `Team Lead of ${t.name}` : t.name}
+                        </Link>
+                      );
+                    })}
+                  </div>
+                )}
               </div>
             </div>
 
@@ -236,7 +309,7 @@ const UserDetail = () => {
         >
           {tab === 'overview' && (
             <div className="space-y-4 sm:space-y-5">
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4">
+              <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
                 <StatMini
                   icon={CheckSquare}
                   label="Tasks assigned"
@@ -248,6 +321,12 @@ const UserDetail = () => {
                   label="Projects"
                   value={user.projects}
                   tone="from-[#ECFDF5] to-[#A7F3D0] text-emerald-600 ring-emerald-500/10"
+                />
+                <StatMini
+                  icon={Timer}
+                  label="Time this week"
+                  value={formatHours(getUserWeekMinutes(user.id))}
+                  tone="from-[#EEF2FF] to-[#C7D2FE] text-indigo-700 ring-indigo-500/10"
                 />
                 <StatMini
                   icon={LogIn}
@@ -320,7 +399,14 @@ const UserDetail = () => {
                     </div>
                     {[
                       { icon: Users2, label: 'Department', value: user.department },
-                      { icon: UserRound, label: 'Team', value: user.team },
+                      {
+                        icon: UsersRound,
+                        label: 'Teams',
+                        value:
+                          userTeams.length > 0
+                            ? userTeams.map((t) => t.name).join(', ')
+                            : user.team || '—',
+                      },
                       { icon: Shield, label: 'Role', value: user.role },
                       { icon: LogIn, label: 'Last login', value: user.lastLogin },
                     ].map((row) => (
@@ -333,7 +419,23 @@ const UserDetail = () => {
                             {row.label}
                           </dt>
                           <dd className="mt-0.5 text-[13px] font-medium text-heading">
-                            {row.label === 'Role' ? <RoleBadge role={user.role} /> : row.value}
+                            {row.label === 'Role' ? (
+                              <RoleBadge role={user.role} />
+                            ) : row.label === 'Teams' && userTeams.length > 0 ? (
+                              <span className="flex flex-wrap gap-1.5">
+                                {userTeams.map((t) => (
+                                  <Link
+                                    key={t.id}
+                                    to={`/dashboard/teams/${t.id}`}
+                                    className="text-primary hover:underline"
+                                  >
+                                    {t.name}
+                                  </Link>
+                                ))}
+                              </span>
+                            ) : (
+                              row.value
+                            )}
                           </dd>
                         </div>
                       </div>
@@ -341,6 +443,78 @@ const UserDetail = () => {
                   </dl>
                 </div>
               </div>
+
+              <div className="rounded-[20px] border border-border/45 bg-white/90 p-4 sm:p-5 shadow-[0_2px_12px_rgba(15,23,42,0.04)]">
+                <div className="mb-3 flex items-center justify-between gap-2">
+                  <h2 className="text-[14px] font-semibold text-heading tracking-tight inline-flex items-center gap-2">
+                    <Video size={15} className="text-primary" />
+                    Upcoming meetings
+                  </h2>
+                  <Link
+                    to="/dashboard/meetings"
+                    className="text-[12px] font-semibold text-primary hover:underline"
+                  >
+                    View all
+                  </Link>
+                </div>
+                {upcomingMeetings.length === 0 ? (
+                  <p className="text-[12.5px] text-secondaryText py-2">
+                    No upcoming meetings for this person.
+                  </p>
+                ) : (
+                  <div className="space-y-2.5">
+                    {upcomingMeetings.map((m) => (
+                      <MeetingRow
+                        key={m.id}
+                        meeting={m}
+                        compact
+                        onOpen={(meetingId) => navigate(`/dashboard/meetings/${meetingId}`)}
+                      />
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {recentUploads.length > 0 && (
+                <div className="rounded-[20px] border border-border/45 bg-white/90 p-4 sm:p-5 shadow-[0_2px_12px_rgba(15,23,42,0.04)]">
+                  <div className="mb-3 flex items-center justify-between gap-2">
+                    <h2 className="text-[14px] font-semibold text-heading tracking-tight inline-flex items-center gap-2">
+                      <FileText size={15} className="text-primary" />
+                      Recently uploaded
+                    </h2>
+                    <Link
+                      to="/dashboard/files"
+                      className="text-[12px] font-semibold text-primary hover:underline"
+                    >
+                      Open Files
+                    </Link>
+                  </div>
+                  <ul className="space-y-2">
+                    {recentUploads.map((f) => (
+                      <li key={f.id}>
+                        <Link
+                          to={`/dashboard/files/${f.id}`}
+                          className="
+                            flex items-center gap-3 rounded-[14px] border border-border/40
+                            bg-slate-50/50 px-3 py-2.5
+                            hover:border-primary/20 hover:bg-primary/[0.03] transition-colors
+                          "
+                        >
+                          <FileTypeIcon type={f.type} size="sm" />
+                          <span className="min-w-0 flex-1">
+                            <span className="block text-[13px] font-semibold text-heading truncate">
+                              {f.name}
+                            </span>
+                            <span className="block text-[11.5px] text-secondaryText">
+                              {f.sizeLabel} · {formatFileDate(f.uploadedAt)}
+                            </span>
+                          </span>
+                        </Link>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
             </div>
           )}
 

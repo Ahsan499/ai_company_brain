@@ -13,6 +13,7 @@ const UserTable = ({
   selectedIds = [],
   onToggle,
   onToggleAll,
+  teamLeadId = null,
 }) => {
   const allSelected = users.length > 0 && users.every((u) => selectedIds.includes(u.id));
   const someSelected = users.some((u) => selectedIds.includes(u.id)) && !allSelected;
@@ -48,7 +49,14 @@ const UserTable = ({
                     {user.initials}
                   </div>
                   <div className="min-w-0 flex-1">
-                    <p className="text-[13.5px] font-semibold text-heading truncate">{user.name}</p>
+                    <p className="text-[13.5px] font-semibold text-heading truncate inline-flex items-center gap-1.5">
+                      <span className="truncate">{user.name}</span>
+                      {teamLeadId === user.id && (
+                        <span className="shrink-0 rounded-md bg-primary/10 px-1.5 py-0.5 text-[9.5px] font-semibold text-primary ring-1 ring-primary/12">
+                          Team Lead
+                        </span>
+                      )}
+                    </p>
                     <p className="text-[11.5px] text-secondaryText truncate">{user.email}</p>
                     <div className="mt-1.5 flex flex-wrap gap-1.5">
                       <RoleBadge role={user.role} />
@@ -106,6 +114,7 @@ const UserTable = ({
                   user={user}
                   selected={selectedIds.includes(user.id)}
                   onToggle={onToggle}
+                  teamLeadId={teamLeadId}
                 />
               ))}
             </tbody>

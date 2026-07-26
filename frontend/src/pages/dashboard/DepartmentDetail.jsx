@@ -11,6 +11,7 @@ import {
   Network,
   Settings,
   Users2,
+  UsersRound,
 } from 'lucide-react';
 import Button from '../../components/ui/Button';
 import EmptyState from '../../components/dashboard/EmptyState';
@@ -19,6 +20,7 @@ import DepartmentTabs from '../../components/departments/DepartmentTabs';
 import DepartmentStatCard from '../../components/departments/DepartmentStatCard';
 import ManagerBadge from '../../components/departments/ManagerBadge';
 import ProjectCard from '../../components/projects/ProjectCard';
+import TeamCard from '../../components/teams/TeamCard';
 import StatusBadge from '../../components/users/StatusBadge';
 import {
   getDepartmentById,
@@ -26,6 +28,7 @@ import {
 } from '../../components/departments/departmentData';
 import { USERS } from '../../components/users/userData';
 import { getProjectsByDepartment } from '../../components/projects/projectData';
+import { getTeamsByDepartment } from '../../components/teams/teamData';
 
 const DepartmentDetail = () => {
   const { id } = useParams();
@@ -41,6 +44,11 @@ const DepartmentDetail = () => {
 
   const deptProjects = useMemo(
     () => (dept ? getProjectsByDepartment(dept.id) : []),
+    [dept]
+  );
+
+  const deptTeams = useMemo(
+    () => (dept ? getTeamsByDepartment(dept.id) : []),
     [dept]
   );
 
@@ -153,7 +161,11 @@ const DepartmentDetail = () => {
       <DepartmentTabs
         value={tab}
         onChange={setTab}
-        counts={{ members: members.length, projects: deptProjects.length }}
+        counts={{
+          members: members.length,
+          teams: deptTeams.length,
+          projects: deptProjects.length,
+        }}
       />
 
       <AnimatePresence mode="wait">
@@ -245,6 +257,34 @@ const DepartmentDetail = () => {
                 onToggle={toggle}
                 onToggleAll={toggleAll}
               />
+            )
+          )}
+
+          {tab === 'teams' && (
+            deptTeams.length === 0 ? (
+              <div className="rounded-[20px] border border-dashed border-border/70 bg-white/60 py-4">
+                <EmptyState
+                  icon={UsersRound}
+                  title="No teams yet"
+                  description="Squads inside this department will appear here."
+                  action={
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      className="rounded-xl"
+                      onClick={() => navigate('/dashboard/teams')}
+                    >
+                      Open Teams
+                    </Button>
+                  }
+                />
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3.5 sm:gap-4">
+                {deptTeams.map((t, i) => (
+                  <TeamCard key={t.id} team={t} index={i} />
+                ))}
+              </div>
             )
           )}
 

@@ -10,6 +10,7 @@ const UserRow = ({
   selected = false,
   onToggle,
   showCheckbox = true,
+  teamLeadId = null,
 }) => {
   const [menuOpen, setMenuOpen] = useState(false);
   const menuRef = useRef(null);
@@ -51,8 +52,13 @@ const UserRow = ({
             {user.initials}
           </div>
           <div className="min-w-0">
-            <p className="text-[13px] font-semibold text-heading tracking-tight truncate group-hover:text-primary transition-colors">
-              {user.name}
+            <p className="text-[13px] font-semibold text-heading tracking-tight truncate group-hover:text-primary transition-colors inline-flex items-center gap-1.5">
+              <span className="truncate">{user.name}</span>
+              {teamLeadId === user.id && (
+                <span className="shrink-0 rounded-md bg-primary/10 px-1.5 py-0.5 text-[9.5px] font-semibold text-primary ring-1 ring-primary/12">
+                  Team Lead
+                </span>
+              )}
             </p>
             <p className="text-[11.5px] text-secondaryText truncate sm:hidden">{user.email}</p>
           </div>

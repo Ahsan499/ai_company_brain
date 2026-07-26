@@ -1,9 +1,10 @@
-import { useEffect } from 'react';
+import { useEffect, useMemo } from 'react';
 import { Link } from 'react-router-dom';
 import { AnimatePresence, motion } from 'framer-motion';
 import {
   Building2,
   CalendarDays,
+  Clock,
   Network,
   Paperclip,
   FolderKanban,
@@ -15,14 +16,22 @@ import PriorityBadge from '../projects/PriorityBadge';
 import TaskStatusBadge from './TaskStatusBadge';
 import SubtaskChecklist from './SubtaskChecklist';
 import TaskComment from './TaskComment';
+import FileTypeIcon from '../files/FileTypeIcon';
 import {
   TASK_STATUSES,
   TASK_STATUS_META,
   formatTaskDate,
 } from './taskData';
 import { PROJECT_PRIORITIES, PRIORITY_META } from '../projects/projectData';
+import { formatHours, getTaskLoggedMinutes } from '../time-tracking/timeEntryData';
+import { getFilesByTask } from '../files/fileData';
 
 const TaskDetailDrawer = ({ open, task, onClose, onStatusChange, onPriorityChange, onToggleSubtask }) => {
+  const linkedFiles = useMemo(
+    () => (task ? getFilesByTask(task.id) : []),
+    [task]
+  );
+
   useEffect(() => {
     if (!open) return undefined;
     const onKey = (e) => {
@@ -196,19 +205,20 @@ const TaskDetailDrawer = ({ open, task, onClose, onStatusChange, onPriorityChang
                       <Paperclip size={14} className="text-slate-400" />
                       <h3 className="text-[13px] font-semibold text-heading">Attachments</h3>
                     </div>
-                    {(task.attachments || []).length === 0 ? (
+                    {linkedFiles.length === 0 ? (
                       <p className="text-[12.5px] text-secondaryText">No attachments.</p>
                     ) : (
                       <div className="flex flex-wrap gap-2">
-                        {task.attachments.map((f) => (
-                          <span
+                        {linkedFiles.map((f) => (
+                          <Link
                             key={f.id}
-                            className="inline-flex items-center gap-1.5 rounded-xl border border-border/50 bg-white px-2.5 py-1.5 text-[12px] font-medium text-heading"
+                            to={`/dashboard/files/${f.id}`}
+                            className="inline-flex items-center gap-1.5 rounded-xl border border-border/50 bg-white px-2.5 py-1.5 text-[12px] font-medium text-heading hover:border-primary/25 hover:bg-primary/[0.03] transition-colors"
                           >
-                            <Paperclip size={12} className="text-slate-400" />
-                            {f.name}
-                            <span className="text-[10.5px] text-slate-400">{f.size}</span>
-                          </span>
+                            <FileTypeIcon type={f.type} size="xs" />
+                            <span className="max-w-[140px] truncate">{f.name}</span>
+                            <span className="text-[10.5px] text-slate-400">{f.sizeLabel}</span>
+                          </Link>
                         ))}
                       </div>
                     )}
@@ -247,6 +257,11 @@ const TaskDetailDrawer = ({ open, task, onClose, onStatusChange, onPriorityChang
                     label="Organization"
                     value={task.organizationName}
                     to={`/dashboard/organizations/${task.organizationId}`}
+                  />
+                  <Meta
+                    icon={Clock}
+                    label="Time logged"
+                    value={formatHours(getTaskLoggedMinutes(task.id))}
                   />
                 </aside>
               </div>

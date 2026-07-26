@@ -1,29 +1,17 @@
-import React from 'react';
+import { useMemo } from 'react';
+import { Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { Video, CalendarDays } from 'lucide-react';
 import DashboardPanel, { PanelHeader } from './DashboardPanel';
 import EmptyState from './EmptyState';
+import { getDashboardTodayMeetings } from '../meetings/meetingData';
 
-const DEFAULT_MEETINGS = [
-  {
-    time: '10:00 AM',
-    title: 'Product Sync',
-    participants: ['AH', 'SK', 'MR'],
-  },
-  {
-    time: '01:30 PM',
-    title: 'Design Review',
-    participants: ['LN', 'AH'],
-  },
-  {
-    time: '04:00 PM',
-    title: 'Sprint Planning',
-    participants: ['SK', 'MR', 'LN', 'AH'],
-  },
-];
-
-const UpcomingMeetings = ({ meetings = DEFAULT_MEETINGS, delay = 0 }) => {
-  const isEmpty = !meetings?.length;
+const UpcomingMeetings = ({ meetings, delay = 0 }) => {
+  const resolved = useMemo(
+    () => meetings ?? getDashboardTodayMeetings(),
+    [meetings]
+  );
+  const isEmpty = !resolved?.length;
 
   return (
     <DashboardPanel delay={delay} className="h-full" hoverLift={false}>
@@ -32,12 +20,12 @@ const UpcomingMeetings = ({ meetings = DEFAULT_MEETINGS, delay = 0 }) => {
         subtitle="Today's schedule"
         action={
           !isEmpty && (
-            <button
-              type="button"
+            <Link
+              to="/dashboard/meetings"
               className="text-[13px] font-semibold text-primary hover:text-blue-700 transition-colors focus:outline-none focus-visible:underline"
             >
               Calendar
-            </button>
+            </Link>
           )
         }
       />
@@ -50,9 +38,9 @@ const UpcomingMeetings = ({ meetings = DEFAULT_MEETINGS, delay = 0 }) => {
         />
       ) : (
         <ul className="space-y-2.5">
-          {meetings.map((meeting, i) => (
+          {resolved.map((meeting, i) => (
             <motion.li
-              key={meeting.title}
+              key={meeting.id || meeting.title}
               initial={{ opacity: 0, x: 6 }}
               animate={{ opacity: 1, x: 0 }}
               transition={{ delay: delay + 0.08 + i * 0.04 }}
@@ -82,22 +70,37 @@ const UpcomingMeetings = ({ meetings = DEFAULT_MEETINGS, delay = 0 }) => {
                     ))}
                   </div>
                 </div>
-                <motion.button
-                  type="button"
-                  whileHover={{ scale: 1.03 }}
-                  whileTap={{ scale: 0.97 }}
-                  className="
-                    inline-flex items-center gap-1.5 shrink-0 rounded-xl
-                    bg-gradient-to-r from-primary to-[#1D4ED8] text-white
-                    text-[12px] font-semibold px-3.5 py-2
-                    shadow-[0_4px_14px_rgba(37,99,235,0.3)]
-                    hover:shadow-[0_6px_18px_rgba(37,99,235,0.4)]
-                    transition-shadow
-                  "
-                >
-                  <Video size={13} strokeWidth={2.25} />
-                  Join
-                </motion.button>
+                {meeting.id ? (
+                  <Link
+                    to={`/dashboard/meetings/${meeting.id}`}
+                    className="
+                      inline-flex items-center gap-1.5 shrink-0 rounded-xl
+                      bg-gradient-to-r from-primary to-[#1D4ED8] text-white
+                      text-[12px] font-semibold px-3.5 py-2
+                      shadow-[0_4px_14px_rgba(37,99,235,0.3)]
+                      hover:shadow-[0_6px_18px_rgba(37,99,235,0.4)]
+                      transition-shadow
+                    "
+                  >
+                    <Video size={13} strokeWidth={2.25} />
+                    Join
+                  </Link>
+                ) : (
+                  <motion.button
+                    type="button"
+                    whileHover={{ scale: 1.03 }}
+                    whileTap={{ scale: 0.97 }}
+                    className="
+                      inline-flex items-center gap-1.5 shrink-0 rounded-xl
+                      bg-gradient-to-r from-primary to-[#1D4ED8] text-white
+                      text-[12px] font-semibold px-3.5 py-2
+                      shadow-[0_4px_14px_rgba(37,99,235,0.3)]
+                    "
+                  >
+                    <Video size={13} strokeWidth={2.25} />
+                    Join
+                  </motion.button>
+                )}
               </div>
             </motion.li>
           ))}

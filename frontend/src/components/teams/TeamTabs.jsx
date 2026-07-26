@@ -3,12 +3,12 @@ import { motion } from 'framer-motion';
 const TABS = [
   { id: 'overview', label: 'Overview' },
   { id: 'members', label: 'Members' },
-  { id: 'teams', label: 'Teams' },
   { id: 'projects', label: 'Projects' },
-  { id: 'settings', label: 'Settings' },
+  { id: 'tasks', label: 'Tasks' },
+  { id: 'meetings', label: 'Meetings' },
 ];
 
-const DepartmentTabs = ({ value = 'overview', onChange, counts = {} }) => {
+const TeamTabs = ({ value = 'overview', onChange, counts = {} }) => {
   return (
     <div
       className="
@@ -17,7 +17,7 @@ const DepartmentTabs = ({ value = 'overview', onChange, counts = {} }) => {
         shadow-[0_1px_2px_rgba(15,23,42,0.03)_inset]
       "
       role="tablist"
-      aria-label="Department sections"
+      aria-label="Team sections"
     >
       {TABS.map((tab) => {
         const active = value === tab.id;
@@ -38,7 +38,7 @@ const DepartmentTabs = ({ value = 'overview', onChange, counts = {} }) => {
           >
             {active && (
               <motion.span
-                layoutId="dept-tab-pill"
+                layoutId="team-tab-pill"
                 className="absolute inset-0 rounded-[11px] bg-white shadow-[0_1px_3px_rgba(15,23,42,0.08)] ring-1 ring-primary/10"
                 transition={{ type: 'spring', stiffness: 440, damping: 34 }}
               />
@@ -63,4 +63,4 @@ const DepartmentTabs = ({ value = 'overview', onChange, counts = {} }) => {
   );
 };
 
-export default DepartmentTabs;
+export default TeamTabs;

@@ -17,6 +17,12 @@ import DepartmentDetail from './pages/dashboard/DepartmentDetail'
 import Projects from './pages/dashboard/Projects'
 import ProjectDetail from './pages/dashboard/ProjectDetail'
 import Tasks from './pages/dashboard/Tasks'
+import Teams from './pages/dashboard/Teams'
+import TeamDetail from './pages/dashboard/TeamDetail'
+import Meetings from './pages/dashboard/Meetings'
+import TimeTracking from './pages/dashboard/TimeTracking'
+import TimeTrackingReports from './pages/dashboard/TimeTrackingReports'
+import Files from './pages/dashboard/Files'
 
 function App() {
   return (
@@ -155,6 +161,70 @@ function App() {
           element={
             <DashboardLayout>
               <Tasks />
+            </DashboardLayout>
+          }
+        />
+        <Route
+          path="/dashboard/teams"
+          element={
+            <DashboardLayout>
+              <Teams />
+            </DashboardLayout>
+          }
+        />
+        <Route
+          path="/dashboard/teams/:id"
+          element={
+            <DashboardLayout>
+              <TeamDetail />
+            </DashboardLayout>
+          }
+        />
+        <Route
+          path="/dashboard/meetings"
+          element={
+            <DashboardLayout>
+              <Meetings />
+            </DashboardLayout>
+          }
+        />
+        <Route
+          path="/dashboard/meetings/:id"
+          element={
+            <DashboardLayout>
+              <Meetings />
+            </DashboardLayout>
+          }
+        />
+        <Route
+          path="/dashboard/time-tracking"
+          element={
+            <DashboardLayout>
+              <TimeTracking />
+            </DashboardLayout>
+          }
+        />
+        <Route
+          path="/dashboard/time-tracking/reports"
+          element={
+            <DashboardLayout>
+              <TimeTrackingReports />
+            </DashboardLayout>
+          }
+        />
+        <Route
+          path="/dashboard/files"
+          element={
+            <DashboardLayout>
+              <Files />
+            </DashboardLayout>
+          }
+        />
+        <Route
+          path="/dashboard/files/:id"
+          element={
+            <DashboardLayout>
+              <Files />
             </DashboardLayout>
           }
         />

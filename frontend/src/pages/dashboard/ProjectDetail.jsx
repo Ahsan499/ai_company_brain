@@ -10,10 +10,13 @@ import {
   Clock,
   FileText,
   FolderKanban,
+  Layers,
   Network,
   Settings,
+  Timer,
   UserPlus,
   Users2,
+  Video,
 } from 'lucide-react';
 import Button from '../../components/ui/Button';
 import EmptyState from '../../components/dashboard/EmptyState';
@@ -24,6 +27,8 @@ import ProjectStatCard from '../../components/projects/ProjectStatCard';
 import MemberAvatarStack from '../../components/projects/MemberAvatarStack';
 import MilestoneList from '../../components/projects/MilestoneList';
 import TaskRow from '../../components/tasks/TaskRow';
+import MeetingRow from '../../components/meetings/MeetingRow';
+import FileRow from '../../components/files/FileRow';
 import {
   getProjectById,
   formatProjectDate,
@@ -33,12 +38,20 @@ import {
   getTasksByProject,
   projectTaskStats,
 } from '../../components/tasks/taskData';
+import { getTeamsByProject } from '../../components/teams/teamData';
+import { getMeetingsByProject } from '../../components/meetings/meetingData';
+import {
+  formatHours,
+  getProjectLoggedMinutes,
+} from '../../components/time-tracking/timeEntryData';
+import { getFilesByProject } from '../../components/files/fileData';
 import { getUserById } from '../../components/users/userData';
 
 const TABS = [
   { id: 'overview', label: 'Overview' },
   { id: 'tasks', label: 'Tasks' },
   { id: 'team', label: 'Team' },
+  { id: 'meetings', label: 'Meetings' },
   { id: 'timeline', label: 'Timeline' },
   { id: 'files', label: 'Files' },
   { id: 'settings', label: 'Settings' },
@@ -66,6 +79,21 @@ const ProjectDetail = () => {
 
   const taskStats = useMemo(
     () => (project ? projectTaskStats(project.id) : { total: 0, done: 0 }),
+    [project]
+  );
+
+  const assignedTeams = useMemo(
+    () => (project ? getTeamsByProject(project.id) : []),
+    [project]
+  );
+
+  const projectMeetings = useMemo(
+    () => (project ? getMeetingsByProject(project.id) : []),
+    [project]
+  );
+
+  const projectFiles = useMemo(
+    () => (project ? getFilesByProject(project.id) : []),
     [project]
   );
 
@@ -200,7 +228,11 @@ const ProjectDetail = () => {
               ? projectTasks.length
               : t.id === 'team'
                 ? project.members.length
-                : undefined;
+                : t.id === 'meetings'
+                  ? projectMeetings.length
+                  : t.id === 'files'
+                    ? projectFiles.length
+                    : undefined;
           return (
             <button
               key={t.id}
@@ -249,7 +281,7 @@ const ProjectDetail = () => {
         >
           {tab === 'overview' && (
             <div className="space-y-4 sm:space-y-5">
-              <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+              <div className="grid grid-cols-2 lg:grid-cols-5 gap-3 sm:gap-4">
                 <ProjectStatCard
                   icon={FolderKanban}
                   label="Progress"
@@ -261,6 +293,12 @@ const ProjectDetail = () => {
                   label="Tasks done"
                   value={`${taskStats.done}/${taskStats.total}`}
                   tone="from-[#ECFDF5] to-[#A7F3D0] text-emerald-600 ring-emerald-500/10"
+                />
+                <ProjectStatCard
+                  icon={Timer}
+                  label="Hours logged"
+                  value={formatHours(getProjectLoggedMinutes(project.id))}
+                  tone="from-[#EEF2FF] to-[#C7D2FE] text-indigo-700 ring-indigo-500/10"
                 />
                 <ProjectStatCard
                   icon={Clock}
@@ -413,47 +451,122 @@ const ProjectDetail = () => {
           )}
 
           {tab === 'team' && (
-            <div className="overflow-hidden rounded-[20px] border border-border/45 bg-white/90 shadow-[0_2px_12px_rgba(15,23,42,0.04)]">
-              <div className="border-b border-border/40 px-4 sm:px-5 py-3.5 flex items-center justify-between">
-                <div>
-                  <h2 className="text-[14px] font-semibold text-heading">Project team</h2>
-                  <p className="mt-0.5 text-[12px] text-secondaryText">
-                    Members with roles on this workspace
-                  </p>
+            <div className="space-y-4">
+              {assignedTeams.length > 0 && (
+                <div className="overflow-hidden rounded-[20px] border border-border/45 bg-white/90 shadow-[0_2px_12px_rgba(15,23,42,0.04)]">
+                  <div className="border-b border-border/40 px-4 sm:px-5 py-3.5 flex items-center justify-between">
+                    <div>
+                      <h2 className="text-[14px] font-semibold text-heading">Assigned teams</h2>
+                      <p className="mt-0.5 text-[12px] text-secondaryText">
+                        Squads linked to this project
+                      </p>
+                    </div>
+                    <span className="rounded-full bg-slate-100 px-2.5 py-0.5 text-[11px] font-semibold text-secondaryText tabular-nums">
+                      {assignedTeams.length}
+                    </span>
+                  </div>
+                  <ul className="divide-y divide-border/35">
+                    {assignedTeams.map((t) => (
+                      <li key={t.id}>
+                        <Link
+                          to={`/dashboard/teams/${t.id}`}
+                          className="flex items-center gap-3 px-4 sm:px-5 py-3.5 hover:bg-slate-50/80 transition-colors"
+                        >
+                          <span
+                            className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br ${t.iconTone}`}
+                          >
+                            <Layers size={16} strokeWidth={2} />
+                          </span>
+                          <span className="min-w-0 flex-1">
+                            <span className="block text-[13.5px] font-semibold text-heading truncate">
+                              {t.name}
+                            </span>
+                            <span className="block text-[12px] text-secondaryText truncate">
+                              {t.departmentName} · {t.memberIds.length} members · Lead {t.leadName}
+                            </span>
+                          </span>
+                        </Link>
+                      </li>
+                    ))}
+                  </ul>
                 </div>
-                <span className="rounded-full bg-slate-100 px-2.5 py-0.5 text-[11px] font-semibold text-secondaryText tabular-nums">
-                  {project.members.length}
-                </span>
+              )}
+
+              <div className="overflow-hidden rounded-[20px] border border-border/45 bg-white/90 shadow-[0_2px_12px_rgba(15,23,42,0.04)]">
+                <div className="border-b border-border/40 px-4 sm:px-5 py-3.5 flex items-center justify-between">
+                  <div>
+                    <h2 className="text-[14px] font-semibold text-heading">Project team</h2>
+                    <p className="mt-0.5 text-[12px] text-secondaryText">
+                      Members with roles on this workspace
+                    </p>
+                  </div>
+                  <span className="rounded-full bg-slate-100 px-2.5 py-0.5 text-[11px] font-semibold text-secondaryText tabular-nums">
+                    {project.members.length}
+                  </span>
+                </div>
+                <ul className="divide-y divide-border/35">
+                  {project.members.map((m) => {
+                    const user = getUserById(m.userId);
+                    return (
+                      <li key={m.userId}>
+                        <Link
+                          to={`/dashboard/users/${m.userId}`}
+                          className="flex items-center gap-3 px-4 sm:px-5 py-3.5 hover:bg-slate-50/80 transition-colors"
+                        >
+                          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-primary to-[#1D4ED8] text-white text-[11px] font-semibold ring-2 ring-white shadow-sm">
+                            {m.initials}
+                          </span>
+                          <span className="min-w-0 flex-1">
+                            <span className="block text-[13.5px] font-semibold text-heading truncate">
+                              {m.name}
+                            </span>
+                            <span className="block text-[12px] text-secondaryText truncate">
+                              {user?.email || '—'}
+                            </span>
+                          </span>
+                          <span className="rounded-md bg-primary/5 px-2 py-0.5 text-[10.5px] font-semibold text-primary ring-1 ring-primary/10 whitespace-nowrap">
+                            {m.projectRole}
+                          </span>
+                        </Link>
+                      </li>
+                    );
+                  })}
+                </ul>
               </div>
-              <ul className="divide-y divide-border/35">
-                {project.members.map((m) => {
-                  const user = getUserById(m.userId);
-                  return (
-                    <li key={m.userId}>
-                      <Link
-                        to={`/dashboard/users/${m.userId}`}
-                        className="flex items-center gap-3 px-4 sm:px-5 py-3.5 hover:bg-slate-50/80 transition-colors"
-                      >
-                        <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-primary to-[#1D4ED8] text-white text-[11px] font-semibold ring-2 ring-white shadow-sm">
-                          {m.initials}
-                        </span>
-                        <span className="min-w-0 flex-1">
-                          <span className="block text-[13.5px] font-semibold text-heading truncate">
-                            {m.name}
-                          </span>
-                          <span className="block text-[12px] text-secondaryText truncate">
-                            {user?.email || '—'}
-                          </span>
-                        </span>
-                        <span className="rounded-md bg-primary/5 px-2 py-0.5 text-[10.5px] font-semibold text-primary ring-1 ring-primary/10 whitespace-nowrap">
-                          {m.projectRole}
-                        </span>
-                      </Link>
-                    </li>
-                  );
-                })}
-              </ul>
             </div>
+          )}
+
+          {tab === 'meetings' && (
+            projectMeetings.length === 0 ? (
+              <div className="rounded-[20px] border border-dashed border-border/70 bg-white/60 py-4">
+                <EmptyState
+                  icon={Video}
+                  title="No meetings yet"
+                  description="Meetings linked to this project will appear here."
+                  action={
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      className="rounded-xl"
+                      onClick={() => navigate('/dashboard/meetings')}
+                    >
+                      Open Meetings
+                    </Button>
+                  }
+                />
+              </div>
+            ) : (
+              <div className="space-y-2.5">
+                {projectMeetings.map((m) => (
+                  <MeetingRow
+                    key={m.id}
+                    meeting={m}
+                    compact
+                    onOpen={(meetingId) => navigate(`/dashboard/meetings/${meetingId}`)}
+                  />
+                ))}
+              </div>
+            )
           )}
 
           {tab === 'timeline' && (
@@ -467,13 +580,71 @@ const ProjectDetail = () => {
           )}
 
           {tab === 'files' && (
-            <div className="rounded-[20px] border border-dashed border-border/70 bg-white/60 py-4">
-              <EmptyState
-                icon={FileText}
-                title="Files coming soon"
-                description="Project documents and attachments will appear in a later phase."
-              />
-            </div>
+            projectFiles.length === 0 ? (
+              <div className="rounded-[20px] border border-dashed border-border/70 bg-white/60 py-4">
+                <EmptyState
+                  icon={FileText}
+                  title="No files linked"
+                  description="Documents linked to this project will appear here."
+                  action={
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      className="rounded-xl"
+                      onClick={() => navigate('/dashboard/files')}
+                    >
+                      Open Files
+                    </Button>
+                  }
+                />
+              </div>
+            ) : (
+              <div className="overflow-hidden rounded-[20px] border border-border/45 bg-white/90 shadow-[0_2px_12px_rgba(15,23,42,0.04)]">
+                <div className="border-b border-border/40 px-4 sm:px-5 py-3.5 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+                  <div>
+                    <h2 className="text-[14px] font-semibold text-heading">Project files</h2>
+                    <p className="mt-0.5 text-[12px] text-secondaryText">
+                      Linked from the Files module.
+                    </p>
+                  </div>
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    className="rounded-xl w-fit"
+                    onClick={() => navigate('/dashboard/files')}
+                  >
+                    Browse all
+                  </Button>
+                </div>
+                <div className="overflow-x-auto dashboard-scrollbar">
+                  <table className="w-full min-w-[420px] text-left">
+                    <thead>
+                      <tr className="border-b border-border/50 bg-slate-50/80">
+                        {['Name', ''].map((h) => (
+                          <th
+                            key={h || 'actions'}
+                            className="px-3 py-3 text-[10.5px] font-semibold uppercase tracking-[0.08em] text-slate-400"
+                          >
+                            {h}
+                          </th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {projectFiles.map((f, i) => (
+                        <FileRow
+                          key={f.id}
+                          file={f}
+                          index={i}
+                          compact
+                          onOpen={(fileId) => navigate(`/dashboard/files/${fileId}`)}
+                        />
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )
           )}
 
           {tab === 'settings' && (
