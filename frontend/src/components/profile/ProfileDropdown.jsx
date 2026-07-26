@@ -1,4 +1,5 @@
-import React, { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { AnimatePresence, motion } from 'framer-motion';
 import {
   UserRound,
@@ -9,55 +10,12 @@ import {
   HelpCircle,
   Keyboard,
   LogOut,
+  IdCard,
 } from 'lucide-react';
 import ProfileCard from './ProfileCard';
 import ProfileMenuItem from './ProfileMenuItem';
 import ThemeSwitcher from './ThemeSwitcher';
 import StorageCard from './StorageCard';
-
-const MENU_PRIMARY = [
-  {
-    icon: UserRound,
-    title: 'My Profile',
-    description: 'Manage your account',
-  },
-  {
-    icon: Settings,
-    title: 'Account Settings',
-    description: 'Preferences & Security',
-  },
-  {
-    icon: Bell,
-    title: 'Notifications',
-    description: 'Manage notifications',
-  },
-];
-
-const MENU_PREFERENCES = [
-  {
-    icon: Palette,
-    title: 'Appearance',
-    description: 'Light / Dark Mode',
-  },
-  {
-    icon: Languages,
-    title: 'Language',
-    description: 'English',
-  },
-];
-
-const MENU_SUPPORT = [
-  {
-    icon: HelpCircle,
-    title: 'Help Center',
-    description: 'Documentation & Support',
-  },
-  {
-    icon: Keyboard,
-    title: 'Keyboard Shortcuts',
-    description: 'View shortcuts',
-  },
-];
 
 const SectionLabel = ({ children }) => (
   <p className="px-2.5 mb-1 mt-0.5 text-[10.5px] font-semibold uppercase tracking-[0.08em] text-slate-400/90">
@@ -65,27 +23,18 @@ const SectionLabel = ({ children }) => (
   </p>
 );
 
-const MenuGroup = ({ items, startDelay = 0, onItemClick }) => (
-  <div className="space-y-px">
-    {items.map((item, i) => (
-      <ProfileMenuItem
-        key={item.title}
-        icon={item.icon}
-        title={item.title}
-        description={item.description}
-        delay={startDelay + i * 0.028}
-        onClick={onItemClick}
-      />
-    ))}
-  </div>
-);
-
 /**
  * Premium profile menu — desktop dropdown / mobile bottom sheet.
  */
 const ProfileDropdown = ({ open, onClose, anchorRef }) => {
   const panelRef = useRef(null);
+  const navigate = useNavigate();
   const [theme, setTheme] = useState('light');
+
+  const go = (path) => {
+    onClose?.();
+    if (path) navigate(path);
+  };
 
   useEffect(() => {
     if (!open) return undefined;
@@ -157,7 +106,6 @@ const ProfileDropdown = ({ open, onClose, anchorRef }) => {
               sm:shadow-[0_0_0_1px_rgba(15,23,42,0.04),0_4px_8px_rgba(15,23,42,0.03),0_20px_48px_rgba(15,23,42,0.12)]
             "
           >
-            {/* Soft glass highlight */}
             <div
               className="pointer-events-none absolute inset-x-0 top-0 h-24 rounded-t-[24px] bg-gradient-to-b from-white/70 to-transparent sm:rounded-t-[24px]"
               aria-hidden
@@ -170,17 +118,76 @@ const ProfileDropdown = ({ open, onClose, anchorRef }) => {
 
               <div className="pt-3.5">
                 <SectionLabel>Account</SectionLabel>
-                <MenuGroup items={MENU_PRIMARY} startDelay={0.05} onItemClick={onClose} />
+                <div className="space-y-px">
+                  <ProfileMenuItem
+                    icon={IdCard}
+                    title="View Full Profile"
+                    description="Public member profile"
+                    delay={0.05}
+                    onClick={() => go('/dashboard/profile')}
+                  />
+                  <ProfileMenuItem
+                    icon={UserRound}
+                    title="My Profile"
+                    description="Manage your account"
+                    delay={0.078}
+                    onClick={() => go('/dashboard/settings/account')}
+                  />
+                  <ProfileMenuItem
+                    icon={Settings}
+                    title="Account Settings"
+                    description="Preferences & Security"
+                    delay={0.106}
+                    onClick={() => go('/dashboard/settings')}
+                  />
+                  <ProfileMenuItem
+                    icon={Bell}
+                    title="Notifications"
+                    description="Manage notifications"
+                    delay={0.134}
+                    onClick={() => go('/dashboard/settings/notifications')}
+                  />
+                </div>
               </div>
 
               <div className="pt-2">
                 <SectionLabel>Preferences</SectionLabel>
-                <MenuGroup items={MENU_PREFERENCES} startDelay={0.12} onItemClick={onClose} />
+                <div className="space-y-px">
+                  <ProfileMenuItem
+                    icon={Palette}
+                    title="Appearance"
+                    description="Light / Dark Mode"
+                    delay={0.15}
+                    onClick={onClose}
+                  />
+                  <ProfileMenuItem
+                    icon={Languages}
+                    title="Language"
+                    description="English"
+                    delay={0.178}
+                    onClick={onClose}
+                  />
+                </div>
               </div>
 
               <div className="pt-2">
                 <SectionLabel>Support</SectionLabel>
-                <MenuGroup items={MENU_SUPPORT} startDelay={0.16} onItemClick={onClose} />
+                <div className="space-y-px">
+                  <ProfileMenuItem
+                    icon={HelpCircle}
+                    title="Help Center"
+                    description="Documentation & Support"
+                    delay={0.2}
+                    onClick={onClose}
+                  />
+                  <ProfileMenuItem
+                    icon={Keyboard}
+                    title="Keyboard Shortcuts"
+                    description="View shortcuts"
+                    delay={0.228}
+                    onClick={onClose}
+                  />
+                </div>
               </div>
 
               <div className="pt-3 space-y-3">

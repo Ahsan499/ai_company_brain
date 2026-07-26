@@ -33,10 +33,10 @@ const NAV_ITEMS = [
   { to: '/dashboard/time-tracking', label: 'Time Tracking', icon: Timer },
   { to: '/dashboard/files', label: 'Files', icon: Files },
   { to: '/dashboard/notifications', label: 'Notifications', icon: Bell },
-  { to: '#reports', label: 'Reports', icon: BarChart3 },
-  { to: '#audit-logs', label: 'Audit Logs', icon: ScrollText },
-  { to: '#settings', label: 'Settings', icon: Settings },
-  { to: '#profile', label: 'Profile', icon: UserRound },
+  { to: '/dashboard/reports', label: 'Reports', icon: BarChart3 },
+  { to: '/dashboard/audit-logs', label: 'Audit Logs', icon: ScrollText },
+  { to: '/dashboard/settings', label: 'Settings', icon: Settings },
+  { to: '/dashboard/profile', label: 'Profile', icon: UserRound },
 ];
 
 const SidebarContent = ({ onNavigate }) => (

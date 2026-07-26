@@ -1,4 +1,3 @@
-import React from 'react';
 import { motion } from 'framer-motion';
 import { FolderPlus, CheckCircle2, CalendarClock, UserPlus, Activity } from 'lucide-react';
 import DashboardPanel, { PanelHeader } from './DashboardPanel';
@@ -54,7 +53,7 @@ const ActivityTimeline = ({ activities = DEFAULT_ACTIVITIES, delay = 0 }) => {
             const Icon = item.icon;
             const isLast = i === activities.length - 1;
             return (
-              <li key={item.title} className="relative flex gap-3.5 pb-5 last:pb-0">
+              <li key={item.id || `${item.title}-${i}`} className="relative flex gap-3.5 pb-5 last:pb-0">
                 {!isLast && (
                   <span
                     className="absolute left-[15px] top-9 bottom-0 w-px bg-gradient-to-b from-border to-transparent"

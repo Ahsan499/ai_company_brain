@@ -23,6 +23,16 @@ import Meetings from './pages/dashboard/Meetings'
 import TimeTracking from './pages/dashboard/TimeTracking'
 import TimeTrackingReports from './pages/dashboard/TimeTrackingReports'
 import Files from './pages/dashboard/Files'
+import Reports from './pages/dashboard/Reports'
+import AuditLogs from './pages/dashboard/AuditLogs'
+import Settings from './pages/dashboard/Settings'
+import Profile from './pages/dashboard/Profile'
+import AccountSettings from './components/settings/sections/AccountSettings'
+import OrganizationSettings from './components/settings/sections/OrganizationSettings'
+import SecuritySettings from './components/settings/sections/SecuritySettings'
+import NotificationSettings from './components/settings/sections/NotificationSettings'
+import RolesPermissions from './components/settings/sections/RolesPermissions'
+import BillingSettings from './components/settings/sections/BillingSettings'
 
 function App() {
   return (
@@ -225,6 +235,46 @@ function App() {
           element={
             <DashboardLayout>
               <Files />
+            </DashboardLayout>
+          }
+        />
+        <Route
+          path="/dashboard/reports"
+          element={
+            <DashboardLayout>
+              <Reports />
+            </DashboardLayout>
+          }
+        />
+        <Route
+          path="/dashboard/audit-logs"
+          element={
+            <DashboardLayout>
+              <AuditLogs />
+            </DashboardLayout>
+          }
+        />
+        <Route
+          path="/dashboard/settings"
+          element={
+            <DashboardLayout>
+              <Settings />
+            </DashboardLayout>
+          }
+        >
+          <Route index element={<Navigate to="account" replace />} />
+          <Route path="account" element={<AccountSettings />} />
+          <Route path="organization" element={<OrganizationSettings />} />
+          <Route path="security" element={<SecuritySettings />} />
+          <Route path="notifications" element={<NotificationSettings />} />
+          <Route path="roles-permissions" element={<RolesPermissions />} />
+          <Route path="billing" element={<BillingSettings />} />
+        </Route>
+        <Route
+          path="/dashboard/profile"
+          element={
+            <DashboardLayout>
+              <Profile />
             </DashboardLayout>
           }
         />

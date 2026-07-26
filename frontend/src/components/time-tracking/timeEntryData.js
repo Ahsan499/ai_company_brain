@@ -245,6 +245,12 @@ export function resolveDateRange(preset, customAfter = '', customBefore = '') {
   if (preset === 'this-month') {
     return { after: today.slice(0, 8) + '01', before: today };
   }
+  if (preset === 'this-quarter') {
+    const month = Number(today.slice(5, 7));
+    const qStartMonth = month <= 3 ? 1 : month <= 6 ? 4 : month <= 9 ? 7 : 10;
+    const after = `${today.slice(0, 4)}-${String(qStartMonth).padStart(2, '0')}-01`;
+    return { after, before: today };
+  }
   return { after: '', before: today };
 }
 
