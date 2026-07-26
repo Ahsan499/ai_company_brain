@@ -1,121 +1,167 @@
-import { useState } from 'react'
-import reactLogo from './assets/react.svg'
-import viteLogo from './assets/vite.svg'
-import heroImg from './assets/hero.png'
-import './App.css'
+import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom'
+import AuthLayout from './layouts/AuthLayout'
+import DashboardLayout from './components/layout/DashboardLayout'
+import Login from './pages/auth/Login'
+import ForgotPassword from './pages/auth/ForgotPassword'
+import OtpVerification from './pages/auth/OtpVerification'
+import ResetPassword from './pages/auth/ResetPassword'
+import PasswordUpdated from './pages/auth/PasswordUpdated'
+import Dashboard from './pages/dashboard/Dashboard'
+import Notifications from './pages/dashboard/Notifications'
+import Organizations from './pages/dashboard/Organizations'
+import OrganizationDetail from './pages/dashboard/OrganizationDetail'
+import Users from './pages/dashboard/Users'
+import UserDetail from './pages/dashboard/UserDetail'
+import Departments from './pages/dashboard/Departments'
+import DepartmentDetail from './pages/dashboard/DepartmentDetail'
+import Projects from './pages/dashboard/Projects'
+import ProjectDetail from './pages/dashboard/ProjectDetail'
+import Tasks from './pages/dashboard/Tasks'
 
 function App() {
-  const [count, setCount] = useState(0)
-
   return (
-    <>
-      <section id="center">
-        <div className="hero">
-          <img src={heroImg} className="base" width="170" height="179" alt="" />
-          <img src={reactLogo} className="framework" alt="React logo" />
-          <img src={viteLogo} className="vite" alt="Vite logo" />
-        </div>
-        <div>
-          <h1>Get started</h1>
-          <p>
-            Edit <code>src/App.jsx</code> and save to test <code>HMR</code>
-          </p>
-        </div>
-        <button
-          type="button"
-          className="counter"
-          onClick={() => setCount((count) => count + 1)}
-        >
-          Count is {count}
-        </button>
-      </section>
-
-      <div className="ticks"></div>
-
-      <section id="next-steps">
-        <div id="docs">
-          <svg className="icon" role="presentation" aria-hidden="true">
-            <use href="/icons.svg#documentation-icon"></use>
-          </svg>
-          <h2>Documentation</h2>
-          <p>Your questions, answered</p>
-          <ul>
-            <li>
-              <a href="https://vite.dev/" target="_blank">
-                <img className="logo" src={viteLogo} alt="" />
-                Explore Vite
-              </a>
-            </li>
-            <li>
-              <a href="https://react.dev/" target="_blank">
-                <img className="button-icon" src={reactLogo} alt="" />
-                Learn more
-              </a>
-            </li>
-          </ul>
-        </div>
-        <div id="social">
-          <svg className="icon" role="presentation" aria-hidden="true">
-            <use href="/icons.svg#social-icon"></use>
-          </svg>
-          <h2>Connect with us</h2>
-          <p>Join the Vite community</p>
-          <ul>
-            <li>
-              <a href="https://github.com/vitejs/vite" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#github-icon"></use>
-                </svg>
-                GitHub
-              </a>
-            </li>
-            <li>
-              <a href="https://chat.vite.dev/" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#discord-icon"></use>
-                </svg>
-                Discord
-              </a>
-            </li>
-            <li>
-              <a href="https://x.com/vite_js" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#x-icon"></use>
-                </svg>
-                X.com
-              </a>
-            </li>
-            <li>
-              <a href="https://bsky.app/profile/vite.dev" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#bluesky-icon"></use>
-                </svg>
-                Bluesky
-              </a>
-            </li>
-          </ul>
-        </div>
-      </section>
-
-      <div className="ticks"></div>
-      <section id="spacer"></section>
-    </>
+    <Router>
+      <Routes>
+        <Route
+          path="/auth"
+          element={
+            <AuthLayout variant="login">
+              <Login />
+            </AuthLayout>
+          }
+        />
+        <Route
+          path="/auth/forgot-password"
+          element={
+            <AuthLayout variant="forgot">
+              <ForgotPassword />
+            </AuthLayout>
+          }
+        />
+        <Route
+          path="/auth/verify-otp"
+          element={
+            <AuthLayout variant="otp">
+              <OtpVerification />
+            </AuthLayout>
+          }
+        />
+        <Route
+          path="/auth/reset-password"
+          element={
+            <AuthLayout variant="reset">
+              <ResetPassword />
+            </AuthLayout>
+          }
+        />
+        <Route
+          path="/auth/password-updated"
+          element={
+            <AuthLayout variant="password-updated">
+              <PasswordUpdated />
+            </AuthLayout>
+          }
+        />
+        <Route
+          path="/dashboard"
+          element={
+            <DashboardLayout>
+              <Dashboard />
+            </DashboardLayout>
+          }
+        />
+        <Route
+          path="/dashboard/notifications"
+          element={
+            <DashboardLayout>
+              <Notifications />
+            </DashboardLayout>
+          }
+        />
+        <Route
+          path="/dashboard/organizations"
+          element={
+            <DashboardLayout>
+              <Organizations />
+            </DashboardLayout>
+          }
+        />
+        <Route
+          path="/dashboard/organizations/:id"
+          element={
+            <DashboardLayout>
+              <OrganizationDetail />
+            </DashboardLayout>
+          }
+        />
+        <Route
+          path="/dashboard/users"
+          element={
+            <DashboardLayout>
+              <Users />
+            </DashboardLayout>
+          }
+        />
+        <Route
+          path="/dashboard/users/:id"
+          element={
+            <DashboardLayout>
+              <UserDetail />
+            </DashboardLayout>
+          }
+        />
+        <Route
+          path="/dashboard/departments"
+          element={
+            <DashboardLayout>
+              <Departments />
+            </DashboardLayout>
+          }
+        />
+        <Route
+          path="/dashboard/departments/:id"
+          element={
+            <DashboardLayout>
+              <DepartmentDetail />
+            </DashboardLayout>
+          }
+        />
+        <Route
+          path="/dashboard/projects"
+          element={
+            <DashboardLayout>
+              <Projects />
+            </DashboardLayout>
+          }
+        />
+        <Route
+          path="/dashboard/projects/:id"
+          element={
+            <DashboardLayout>
+              <ProjectDetail />
+            </DashboardLayout>
+          }
+        />
+        <Route
+          path="/dashboard/tasks"
+          element={
+            <DashboardLayout>
+              <Tasks />
+            </DashboardLayout>
+          }
+        />
+        <Route
+          path="/dashboard/tasks/:id"
+          element={
+            <DashboardLayout>
+              <Tasks />
+            </DashboardLayout>
+          }
+        />
+        <Route path="/" element={<Navigate to="/dashboard" replace />} />
+        <Route path="*" element={<Navigate to="/dashboard" replace />} />
+      </Routes>
+    </Router>
   )
 }
 
