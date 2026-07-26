@@ -3,6 +3,8 @@
 namespace App\Models;
 
 use App\Enums\UserStatus;
+use App\Support\RoleLabel;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
@@ -16,6 +18,62 @@ use Spatie\Permission\Traits\HasRoles;
 class User extends Authenticatable
 {
     use HasApiTokens, HasFactory, HasRoles, Notifiable, SoftDeletes;
+
+    public function scopeSearch(Builder $query, ?string $search): Builder
+    {
+        if (! $search) {
+            return $query;
+        }
+
+        $term = '%'.$search.'%';
+
+        return $query->where(function (Builder $q) use ($term) {
+            $q->where('name', 'like', $term)
+                ->orWhere('email', 'like', $term)
+                ->orWhereHas('department', fn (Builder $d) => $d->where('name', 'like', $term))
+                ->orWhereHas('organization', fn (Builder $o) => $o->where('name', 'like', $term))
+                ->orWhereHas('roles', fn (Builder $r) => $r->where('name', 'like', $term));
+        });
+    }
+
+    public function scopeStatus(Builder $query, ?string $status): Builder
+    {
+        if (! $status || $status === 'all') {
+            return $query;
+        }
+
+        return $query->where('status', $status);
+    }
+
+    public function scopeFilterRole(Builder $query, ?string $role): Builder
+    {
+        if (! $role || $role === 'all') {
+            return $query;
+        }
+
+        $spatie = RoleLabel::toSpatie($role);
+
+        return $query->whereHas('roles', fn (Builder $r) => $r->where('name', $spatie));
+    }
+
+    public function scopeDepartmentId(Builder $query, mixed $departmentId): Builder
+    {
+        if ($departmentId === null || $departmentId === '' || $departmentId === 'all') {
+            return $query;
+        }
+
+        return $query->where('department_id', $departmentId);
+    }
+
+    public function scopeOrganizationId(Builder $query, mixed $organizationId): Builder
+    {
+        if ($organizationId === null || $organizationId === '' || $organizationId === 'all') {
+            return $query;
+        }
+
+        return $query->where('organization_id', $organizationId);
+    }
+
 
     protected $fillable = [
         'organization_id',

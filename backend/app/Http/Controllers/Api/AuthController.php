@@ -8,85 +8,48 @@ use App\Http\Requests\Auth\RegisterRequest;
 use App\Http\Resources\Auth\UserResource;
 use App\Services\AuthService;
 use App\Traits\ApiResponse;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
-use Throwable;
+use RuntimeException;
 
 class AuthController extends Controller
 {
     use ApiResponse;
 
-    protected AuthService $authService;
+    public function __construct(protected AuthService $authService) {}
 
-    public function __construct(AuthService $authService)
+    public function register(RegisterRequest $request): JsonResponse
     {
-        $this->authService = $authService;
+        $result = $this->authService->register($request->validated());
+
+        return $this->successResponse([
+            'user' => new UserResource($result['user']),
+            'token' => $result['token'],
+        ], 'User registered successfully.', 201);
     }
 
-    /**
-     * Register
-     */
-    public function register(RegisterRequest $request)
+    public function login(LoginRequest $request): JsonResponse
     {
         try {
-
-            $result = $this->authService->register($request->validated());
-
-            return $this->successResponse([
-                'user'  => new UserResource($result['user']),
-                'token' => $result['token'],
-            ], 'User registered successfully.', 201);
-
-        } catch (Throwable $e) {
-
-            return $this->errorResponse(
-                $e->getMessage(),
-                500
-            );
-
-        }
-    }
-
-    /**
-     * Login
-     */
-    public function login(LoginRequest $request)
-    {
-        try {
-
             $result = $this->authService->login($request->validated());
-
-            return $this->successResponse([
-                'user'  => new UserResource($result['user']),
-                'token' => $result['token'],
-            ], 'Login successful.');
-
-        } catch (Throwable $e) {
-
-            return $this->errorResponse(
-                $e->getMessage(),
-                401
-            );
-
+        } catch (RuntimeException $e) {
+            return $this->errorResponse($e->getMessage(), null, 401);
         }
+
+        return $this->successResponse([
+            'user' => new UserResource($result['user']),
+            'token' => $result['token'],
+        ], 'Login successful.');
     }
 
-    /**
-     * Logout
-     */
-    public function logout(Request $request)
+    public function logout(Request $request): JsonResponse
     {
         $this->authService->logout($request->user());
 
-        return $this->successResponse(
-            [],
-            'Logout successful.'
-        );
+        return $this->successResponse(null, 'Logout successful.');
     }
 
-    /**
-     * Current Authenticated User
-     */
-    public function me(Request $request)
+    public function me(Request $request): JsonResponse
     {
         $user = $this->authService->me($request->user());
 

@@ -5,6 +5,8 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\TimeEntry\StoreTimeEntryRequest;
 use App\Http\Requests\TimeEntry\UpdateTimeEntryRequest;
+use App\Http\Resources\TimeEntry\TimeEntryResource;
+use App\Models\TimeEntry;
 use App\Services\TimeEntryService;
 use App\Traits\ApiResponse;
 use Illuminate\Http\JsonResponse;
@@ -14,90 +16,88 @@ class TimeEntryController extends Controller
 {
     use ApiResponse;
 
-    protected TimeEntryService $timeEntryService;
+    public function __construct(protected TimeEntryService $timeEntryService) {}
 
-    public function __construct(TimeEntryService $timeEntryService)
+    public function index(Request $request): JsonResponse
     {
-        $this->timeEntryService = $timeEntryService;
+        $this->authorize('viewAny', TimeEntry::class);
+
+        $entries = $this->timeEntryService->index($request, $request->user());
+
+        return TimeEntryResource::collection($entries)
+            ->additional([
+                'success' => true,
+                'message' => 'Time entries retrieved successfully.',
+            ])
+            ->response();
     }
 
-    /**
-     * Display all time entries.
-     */
-    public function index(): JsonResponse
-    {
-        return $this->successResponse(
-            $this->timeEntryService->index(),
-            'Time entries retrieved successfully.'
-        );
-    }
-
-    /**
-     * Store a newly created time entry.
-     */
     public function store(StoreTimeEntryRequest $request): JsonResponse
     {
+        $entry = $this->timeEntryService->store($request->validated(), $request->user());
+
         return $this->successResponse(
-            $this->timeEntryService->store($request->validated()),
+            new TimeEntryResource($entry),
             'Time entry created successfully.',
             201
         );
     }
 
-    /**
-     * Display the specified time entry.
-     */
-    public function show(int $id): JsonResponse
+    public function show(TimeEntry $timeEntry): JsonResponse
     {
+        $this->authorize('view', $timeEntry);
+
+        $entry = $this->timeEntryService->show($timeEntry);
+
         return $this->successResponse(
-            $this->timeEntryService->show($id),
+            new TimeEntryResource($entry),
             'Time entry retrieved successfully.'
         );
     }
 
-    /**
-     * Update the specified time entry.
-     */
-    public function update(UpdateTimeEntryRequest $request, int $id): JsonResponse
+    public function update(UpdateTimeEntryRequest $request, TimeEntry $timeEntry): JsonResponse
     {
+        $entry = $this->timeEntryService->update($timeEntry, $request->validated());
+
         return $this->successResponse(
-            $this->timeEntryService->update($id, $request->validated()),
+            new TimeEntryResource($entry),
             'Time entry updated successfully.'
         );
     }
 
-    /**
-     * Remove the specified time entry.
-     */
-    public function destroy(int $id): JsonResponse
+    public function destroy(TimeEntry $timeEntry): JsonResponse
     {
-        $this->timeEntryService->destroy($id);
+        $this->authorize('delete', $timeEntry);
 
-        return $this->successResponse(
-            [],
-            'Time entry deleted successfully.'
-        );
+        $this->timeEntryService->destroy($timeEntry);
+
+        return $this->successResponse(null, 'Time entry deleted successfully.');
     }
 
-    /**
-     * Start timer.
-     */
-    public function start(Request $request): JsonResponse
+    public function reportSummary(Request $request): JsonResponse
     {
-        return $this->successResponse(
-            $this->timeEntryService->start($request->all()),
-            'Timer started successfully.'
-        );
+        $this->authorize('viewReports', TimeEntry::class);
+
+        $summary = $this->timeEntryService->summary($request, $request->user());
+
+        return $this->successResponse($summary, 'Time summary retrieved successfully.');
     }
 
-    /**
-     * Stop timer.
-     */
-    public function stop(int $id): JsonResponse
+    public function reportByProject(Request $request): JsonResponse
     {
-        return $this->successResponse(
-            $this->timeEntryService->stop($id),
-            'Timer stopped successfully.'
-        );
+        $this->authorize('viewReports', TimeEntry::class);
+
+        $rows = $this->timeEntryService->byProject($request, $request->user());
+
+        return $this->successResponse($rows, 'Hours by project retrieved successfully.');
+    }
+
+    public function reportByUser(Request $request): JsonResponse
+    {
+        $this->authorize('viewReports', TimeEntry::class);
+
+        $rows = $this->timeEntryService->byUser($request, $request->user());
+
+        return $this->successResponse($rows, 'Hours by user retrieved successfully.');
     }
 }

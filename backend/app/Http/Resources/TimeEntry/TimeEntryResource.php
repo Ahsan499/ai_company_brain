@@ -7,52 +7,64 @@ use Illuminate\Http\Resources\Json\JsonResource;
 
 class TimeEntryResource extends JsonResource
 {
-    /**
-     * Transform the resource into an array.
-     */
     public function toArray(Request $request): array
     {
         return [
-
             'id' => $this->id,
+            'userId' => $this->user_id,
+            'userName' => $this->whenLoaded('user', fn () => $this->user?->name),
+            'initials' => $this->whenLoaded('user', fn () => $this->user?->initials),
+            'user' => $this->whenLoaded('user', function () {
+                if (! $this->user) {
+                    return null;
+                }
 
-            'organization' => [
-                'id' => $this->organization->id,
-                'name' => $this->organization->name,
-            ],
+                return [
+                    'id' => $this->user->id,
+                    'name' => $this->user->name,
+                    'initials' => $this->user->initials,
+                ];
+            }),
+            'taskId' => $this->task_id,
+            'taskTitle' => $this->whenLoaded('task', fn () => $this->task?->title),
+            'task' => $this->whenLoaded('task', function () {
+                if (! $this->task) {
+                    return null;
+                }
 
-            'project' => [
-                'id' => $this->project->id,
-                'name' => $this->project->name,
-            ],
+                return [
+                    'id' => $this->task->id,
+                    'title' => $this->task->title,
+                ];
+            }),
+            'projectId' => $this->project_id,
+            'projectName' => $this->whenLoaded('project', fn () => $this->project?->name),
+            'project' => $this->whenLoaded('project', function () {
+                if (! $this->project) {
+                    return null;
+                }
 
-            'task' => [
-                'id' => $this->task->id,
-                'title' => $this->task->title,
-            ],
+                return [
+                    'id' => $this->project->id,
+                    'name' => $this->project->name,
+                ];
+            }),
+            'teamId' => $this->team_id,
+            'teamName' => $this->whenLoaded('team', fn () => $this->team?->name),
+            'team' => $this->whenLoaded('team', function () {
+                if (! $this->team) {
+                    return null;
+                }
 
-            'user' => [
-                'id' => $this->user->id,
-                'name' => $this->user->full_name,
-                'email' => $this->user->email,
-            ],
-
-            'description' => $this->description,
-
-            'start_time' => optional($this->start_time)->format('Y-m-d H:i:s'),
-
-            'end_time' => optional($this->end_time)->format('Y-m-d H:i:s'),
-
-            'duration' => $this->duration,
-
-            'duration_text' => floor($this->duration / 60) . 'h ' . ($this->duration % 60) . 'm',
-
-            'is_active' => $this->is_active,
-
-            'created_at' => $this->created_at,
-
-            'updated_at' => $this->updated_at,
-
+                return [
+                    'id' => $this->team->id,
+                    'name' => $this->team->name,
+                ];
+            }),
+            'date' => optional($this->date)?->toDateString(),
+            'durationMinutes' => (int) $this->duration_minutes,
+            'note' => $this->note,
+            'billable' => (bool) $this->billable,
         ];
     }
 }

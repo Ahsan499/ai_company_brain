@@ -2,74 +2,74 @@
 
 namespace App\Services;
 
+use App\Enums\UserStatus;
 use App\Models\User;
+use App\Support\RoleLabel;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Str;
 
 class AuthService
 {
-    /**
-     * Register a new user.
-     */
     public function register(array $data): array
     {
         return DB::transaction(function () use ($data) {
-
-            $user = User::create([
-                'first_name' => $data['first_name'],
-                'last_name'  => $data['last_name'],
-                'email'      => $data['email'],
-                'password'   => Hash::make($data['password']),
+            $user = User::query()->create([
+                'name' => $data['name'],
+                'email' => $data['email'],
+                'password' => $data['password'],
+                'initials' => $this->initialsFromName($data['name']),
+                'status' => UserStatus::Active,
+                'email_verified_at' => now(),
             ]);
 
-            // Assign default role
-            $user->assignRole('Employee');
+            $user->assignRole(RoleLabel::toSpatie('Employee'));
 
-            // Generate Sanctum Token
-            $token = $user->createToken('API Token')->plainTextToken;
+            $token = $user->createToken('api')->plainTextToken;
 
             return [
-                'user'  => $user->load('roles'),
+                'user' => $user->load(['roles', 'permissions', 'organization', 'department']),
                 'token' => $token,
             ];
         });
     }
 
-    /**
-     * Login user.
-     */
     public function login(array $data): array
     {
-        $user = User::where('email', $data['email'])->first();
+        $user = User::query()->where('email', $data['email'])->first();
 
-        if (! $user || ! Hash::check($data['password'], $user->password)) {
-            throw new \Exception('Invalid credentials.');
+        if (! $user || ! password_verify($data['password'], $user->getAuthPassword())) {
+            throw new \RuntimeException('Invalid credentials.');
         }
 
-        // Remove old tokens (optional)
-        $user->tokens()->delete();
+        $user->forceFill(['last_login_at' => now()])->save();
 
-        $token = $user->createToken('API Token')->plainTextToken;
+        $token = $user->createToken('api')->plainTextToken;
 
         return [
-            'user'  => $user->load('roles'),
+            'user' => $user->load(['roles', 'permissions', 'organization', 'department']),
             'token' => $token,
         ];
     }
 
-    /**
-     * Logout user.
-     */
     public function logout(User $user): void
     {
-        $user->currentAccessToken()->delete();
+        $user->currentAccessToken()?->delete();
     }
 
-    /**
-     * Authenticated user.
-     */
     public function me(User $user): User
     {
-        return $user->load('roles');
+        return $user->load(['roles', 'permissions', 'organization', 'department']);
+    }
+
+    private function initialsFromName(string $name): string
+    {
+        $parts = preg_split('/\s+/', trim($name)) ?: [];
+        $initials = collect($parts)
+            ->filter()
+            ->take(2)
+            ->map(fn ($p) => Str::upper(Str::substr($p, 0, 1)))
+            ->implode('');
+
+        return $initials !== '' ? $initials : 'U';
     }
 }

@@ -2,97 +2,143 @@
 
 namespace App\Services;
 
-use App\Http\Resources\User\UserResource;
+use App\Enums\UserStatus;
+use App\Models\Department;
 use App\Models\User;
+use App\Support\RoleLabel;
+use Illuminate\Contracts\Pagination\LengthAwarePaginator;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Str;
 
 class UserService
 {
-    /**
-     * Display all users.
-     */
-    public function index()
+    public function index(Request $request, User $actor): LengthAwarePaginator
     {
-        $users = User::with(['organization', 'roles'])
-            ->latest()
-            ->paginate(10);
+        $perPage = min(max((int) $request->integer('per_page', 20), 1), 100);
 
-        return UserResource::collection($users);
+        $query = User::query()
+            ->with(['organization', 'department', 'manager', 'teams', 'roles'])
+            ->withCount(['assignedTasks', 'projects'])
+            ->search($request->string('search')->toString() ?: $request->string('query')->toString())
+            ->status($request->string('status')->toString())
+            ->filterRole($request->string('role')->toString())
+            ->departmentId($request->input('department_id', $request->input('departmentId')))
+            ->organizationId($request->input('organization_id', $request->input('organizationId')))
+            ->latest('id');
+
+        // Department name filter (frontend uses department labels)
+        $departmentName = $request->string('department')->toString();
+        if ($departmentName && $departmentName !== 'all') {
+            $query->whereHas('department', fn ($q) => $q->where('name', $departmentName));
+        }
+
+        if (! $actor->hasRole('Super Admin')) {
+            $query->where('organization_id', $actor->organization_id);
+        }
+
+        return $query->paginate($perPage);
     }
 
-    /**
-     * Store a newly created user.
-     */
-    public function store(array $data)
+    public function show(User $user, ?Request $request = null): User
+    {
+        $user = $user->load(['organization', 'department', 'manager', 'teams', 'roles'])
+            ->loadCount(['assignedTasks', 'projects']);
+
+        $include = request()->string('include')->toString();
+        if (str_contains($include, 'timeStats')) {
+            $user->setAttribute('hours_this_week', app(TimeEntryService::class)->hoursThisWeek($user));
+        }
+
+        return $user;
+    }
+
+    public function store(array $data): User
     {
         return DB::transaction(function () use ($data) {
-
-            $role = $data['role'];
-            unset($data['role']);
-
-            $data['password'] = Hash::make($data['password']);
-
-            $user = User::create($data);
-
-            $user->assignRole($role);
-
-            $user->load(['organization', 'roles']);
-
-            return new UserResource($user);
-        });
-    }
-
-    /**
-     * Display the specified user.
-     */
-    public function show(int $id)
-    {
-        $user = User::with(['organization', 'roles'])
-            ->findOrFail($id);
-
-        return new UserResource($user);
-    }
-
-    /**
-     * Update the specified user.
-     */
-    public function update(int $id, array $data)
-    {
-        return DB::transaction(function () use ($id, $data) {
-
-            $user = User::findOrFail($id);
-
-            $role = $data['role'];
-            unset($data['role']);
-
-            if (!empty($data['password'])) {
-                $data['password'] = Hash::make($data['password']);
-            } else {
-                unset($data['password']);
+            $departmentId = $data['department_id'] ?? null;
+            if (! $departmentId && ! empty($data['department_name']) && ! empty($data['organization_id'])) {
+                $departmentId = Department::query()
+                    ->where('organization_id', $data['organization_id'])
+                    ->where('name', $data['department_name'])
+                    ->value('id');
             }
 
-            unset($data['password_confirmation']);
+            $password = $data['password'] ?? Str::password(12);
+            $status = $data['status'] ?? (isset($data['password']) ? UserStatus::Active->value : UserStatus::Invited->value);
 
-            $user->update($data);
+            $user = User::query()->create([
+                'organization_id' => $data['organization_id'],
+                'department_id' => $departmentId,
+                'manager_id' => $data['manager_id'] ?? null,
+                'name' => $data['name'],
+                'email' => $data['email'],
+                'password' => $password,
+                'initials' => $data['initials'] ?? $this->initialsFromName($data['name']),
+                'phone' => $data['phone'] ?? null,
+                'location' => $data['location'] ?? null,
+                'status' => $status,
+                'email_verified_at' => now(),
+            ]);
 
-            $user->syncRoles([$role]);
+            $user->assignRole(RoleLabel::toSpatie($data['role']));
 
-            $user->load(['organization', 'roles']);
-
-            return new UserResource($user);
+            return $this->show($user);
         });
     }
 
-    /**
-     * Remove the specified user.
-     */
-    public function destroy(int $id): bool
+    public function update(User $user, array $data): User
     {
-        $user = User::findOrFail($id);
+        return DB::transaction(function () use ($user, $data) {
+            $departmentId = $data['department_id'] ?? $user->department_id;
+            if (array_key_exists('department_name', $data) && $data['department_name']) {
+                $orgId = $data['organization_id'] ?? $user->organization_id;
+                $departmentId = Department::query()
+                    ->where('organization_id', $orgId)
+                    ->where('name', $data['department_name'])
+                    ->value('id') ?? $departmentId;
+            }
 
+            $payload = [
+                'organization_id' => $data['organization_id'] ?? $user->organization_id,
+                'department_id' => $departmentId,
+                'manager_id' => array_key_exists('manager_id', $data) ? $data['manager_id'] : $user->manager_id,
+                'name' => $data['name'] ?? $user->name,
+                'email' => $data['email'] ?? $user->email,
+                'initials' => $data['initials'] ?? $user->initials,
+                'phone' => array_key_exists('phone', $data) ? $data['phone'] : $user->phone,
+                'location' => array_key_exists('location', $data) ? $data['location'] : $user->location,
+                'status' => $data['status'] ?? $user->status,
+            ];
+
+            if (! empty($data['password'])) {
+                $payload['password'] = $data['password'];
+            }
+
+            $user->fill($payload)->save();
+
+            if (! empty($data['role'])) {
+                $user->syncRoles([RoleLabel::toSpatie($data['role'])]);
+            }
+
+            return $this->show($user->fresh());
+        });
+    }
+
+    public function destroy(User $user): void
+    {
         $user->delete();
+    }
 
-        return true;
+    private function initialsFromName(string $name): string
+    {
+        $parts = preg_split('/\s+/', trim($name)) ?: [];
+        $initials = collect($parts)
+            ->filter()
+            ->take(2)
+            ->map(fn ($p) => Str::upper(Str::substr($p, 0, 1)))
+            ->implode('');
+
+        return $initials !== '' ? $initials : 'U';
     }
 }

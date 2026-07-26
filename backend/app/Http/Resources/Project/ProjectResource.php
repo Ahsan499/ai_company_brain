@@ -7,49 +7,85 @@ use Illuminate\Http\Resources\Json\JsonResource;
 
 class ProjectResource extends JsonResource
 {
-    /**
-     * Transform the resource into an array.
-     */
     public function toArray(Request $request): array
     {
+        $tasksTotal = (int) ($this->tasks_count ?? ($this->relationLoaded('tasks') ? $this->tasks->count() : 0));
+        $tasksDone = (int) ($this->tasks_done_count ?? 0);
+        $tasksInProgress = (int) ($this->tasks_in_progress_count ?? 0);
+        $tasksOverdue = (int) ($this->tasks_overdue_count ?? 0);
+
+        $computedProgress = $tasksTotal > 0
+            ? (int) round(($tasksDone / $tasksTotal) * 100)
+            : (int) $this->progress;
+
         return [
             'id' => $this->id,
-
-            'organization' => [
-                'id' => $this->organization->id,
-                'name' => $this->organization->name,
-            ],
-
-            'department' => [
-                'id' => $this->department->id,
-                'name' => $this->department->name,
-            ],
-
             'name' => $this->name,
+            'organizationId' => $this->organization_id,
+            'organizationName' => $this->whenLoaded('organization', fn () => $this->organization?->name),
+            'organization' => $this->whenLoaded('organization', function () {
+                if (! $this->organization) {
+                    return null;
+                }
 
-            'slug' => $this->slug,
-
-            'description' => $this->description,
-
-            'start_date' => optional($this->start_date)->format('Y-m-d'),
-
-            'end_date' => optional($this->end_date)->format('Y-m-d'),
-
-            'status' => $this->status,
-
-            'is_active' => $this->is_active,
-
-            'members' => $this->users->map(function ($user) {
                 return [
-                    'id' => $user->id,
-                    'name' => $user->full_name,
-                    'email' => $user->email,
+                    'id' => $this->organization->id,
+                    'name' => $this->organization->name,
                 ];
             }),
+            'departmentId' => $this->department_id,
+            'departmentName' => $this->whenLoaded('department', fn () => $this->department?->name),
+            'department' => $this->whenLoaded('department', function () {
+                if (! $this->department) {
+                    return null;
+                }
 
-            'created_at' => $this->created_at,
-
-            'updated_at' => $this->updated_at,
+                return [
+                    'id' => $this->department->id,
+                    'name' => $this->department->name,
+                ];
+            }),
+            'status' => $this->status?->value ?? $this->status,
+            'priority' => $this->priority?->value ?? $this->priority,
+            'progress' => $computedProgress,
+            'dueDate' => optional($this->due_date)?->toDateString(),
+            'createdAt' => optional($this->created_at)?->toDateString(),
+            'description' => $this->description,
+            'memberCount' => $this->when(
+                isset($this->members_count),
+                fn () => (int) $this->members_count,
+                fn () => $this->relationLoaded('members') ? $this->members->count() : null,
+            ),
+            'members' => $this->whenLoaded('members', function () {
+                return $this->members->map(fn ($user) => [
+                    'userId' => $user->id,
+                    'projectRole' => $user->pivot->role_in_project,
+                    'roleInProject' => $user->pivot->role_in_project,
+                    'initials' => $user->initials,
+                    'name' => $user->name,
+                ]);
+            }),
+            'taskCounts' => [
+                'total' => $tasksTotal,
+                'done' => $tasksDone,
+                'inProgress' => $tasksInProgress,
+                'overdue' => $tasksOverdue,
+            ],
+            'tasksDone' => $tasksDone,
+            'tasksTotal' => $tasksTotal,
+            'totalHoursLogged' => $this->when(
+                isset($this->time_entries_sum_duration_minutes),
+                fn () => round(((int) $this->time_entries_sum_duration_minutes) / 60, 2),
+            ),
+            'milestones' => $this->whenLoaded('milestones', function () {
+                return $this->milestones->map(fn ($m) => [
+                    'id' => $m->id,
+                    'title' => $m->title,
+                    'dueDate' => optional($m->due_date)?->toDateString(),
+                    'done' => (bool) $m->done,
+                ]);
+            }),
+            'activity' => [],
         ];
     }
 }

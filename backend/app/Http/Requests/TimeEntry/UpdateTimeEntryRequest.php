@@ -6,39 +6,48 @@ use Illuminate\Foundation\Http\FormRequest;
 
 class UpdateTimeEntryRequest extends FormRequest
 {
-    /**
-     * Determine if the user is authorized.
-     */
     public function authorize(): bool
     {
-        return true;
+        return $this->user()?->can('update', $this->route('time_entry')) ?? false;
     }
 
-    /**
-     * Validation rules.
-     */
+    protected function prepareForValidation(): void
+    {
+        $merge = [];
+        foreach ([
+            'userId' => 'user_id',
+            'taskId' => 'task_id',
+            'projectId' => 'project_id',
+            'teamId' => 'team_id',
+            'durationMinutes' => 'duration_minutes',
+        ] as $camel => $snake) {
+            if ($this->has($camel)) {
+                $merge[$snake] = $this->input($camel);
+            }
+        }
+
+        if (! isset($merge['duration_minutes']) && ($this->has('hours') || $this->has('minutes'))) {
+            $hours = (int) $this->input('hours', 0);
+            $minutes = (int) $this->input('minutes', 0);
+            $merge['duration_minutes'] = ($hours * 60) + $minutes;
+        }
+
+        if ($merge) {
+            $this->merge($merge);
+        }
+    }
+
     public function rules(): array
     {
         return [
-
-            'organization_id' => 'required|exists:organizations,id',
-
-            'project_id' => 'required|exists:projects,id',
-
-            'task_id' => 'required|exists:tasks,id',
-
-            'user_id' => 'required|exists:users,id',
-
-            'description' => 'nullable|string',
-
-            'start_time' => 'required|date',
-
-            'end_time' => 'nullable|date|after:start_time',
-
-            'duration' => 'nullable|integer|min:0',
-
-            'is_active' => 'nullable|boolean',
-
+            'user_id' => ['sometimes', 'nullable', 'exists:users,id'],
+            'task_id' => ['sometimes', 'nullable', 'exists:tasks,id'],
+            'project_id' => ['sometimes', 'nullable', 'exists:projects,id'],
+            'team_id' => ['sometimes', 'nullable', 'exists:teams,id'],
+            'date' => ['sometimes', 'required', 'date'],
+            'duration_minutes' => ['sometimes', 'required', 'integer', 'min:1', 'max:1440'],
+            'note' => ['sometimes', 'nullable', 'string'],
+            'billable' => ['sometimes', 'boolean'],
         ];
     }
 }

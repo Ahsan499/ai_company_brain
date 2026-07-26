@@ -2,45 +2,53 @@
 
 namespace App\Http\Requests\Project;
 
+use App\Enums\Priority;
+use App\Enums\ProjectStatus;
+use App\Models\Project;
 use Illuminate\Foundation\Http\FormRequest;
+use Illuminate\Validation\Rule;
 
 class StoreProjectRequest extends FormRequest
 {
-    /**
-     * Determine if the user is authorized.
-     */
     public function authorize(): bool
     {
-        return true;
+        return $this->user()?->can('create', Project::class) ?? false;
     }
 
-    /**
-     * Validation rules.
-     */
+    protected function prepareForValidation(): void
+    {
+        $merge = [];
+        foreach ([
+            'organizationId' => 'organization_id',
+            'departmentId' => 'department_id',
+            'dueDate' => 'due_date',
+            'memberIds' => 'member_ids',
+            'teamIds' => 'team_ids',
+        ] as $camel => $snake) {
+            if ($this->has($camel)) {
+                $merge[$snake] = $this->input($camel);
+            }
+        }
+        if ($merge) {
+            $this->merge($merge);
+        }
+    }
+
     public function rules(): array
     {
         return [
-            'organization_id' => 'required|exists:organizations,id',
-
-            'department_id' => 'required|exists:departments,id',
-
-            'name' => 'required|string|max:255',
-
-            'slug' => 'required|string|max:255|unique:projects,slug',
-
-            'description' => 'nullable|string',
-
-            'start_date' => 'nullable|date',
-
-            'end_date' => 'nullable|date|after_or_equal:start_date',
-
-            'status' => 'required|in:Planning,Active,Completed,On Hold,Cancelled',
-
-            'is_active' => 'nullable|boolean',
-
-            'users' => 'nullable|array',
-
-            'users.*' => 'exists:users,id',
+            'name' => ['required', 'string', 'max:255'],
+            'organization_id' => ['required', 'exists:organizations,id'],
+            'department_id' => ['required', 'exists:departments,id'],
+            'description' => ['nullable', 'string'],
+            'status' => ['nullable', Rule::enum(ProjectStatus::class)],
+            'priority' => ['nullable', Rule::enum(Priority::class)],
+            'due_date' => ['nullable', 'date'],
+            'progress' => ['nullable', 'integer', 'min:0', 'max:100'],
+            'member_ids' => ['nullable', 'array'],
+            'member_ids.*' => ['integer', 'exists:users,id'],
+            'team_ids' => ['nullable', 'array'],
+            'team_ids.*' => ['integer', 'exists:teams,id'],
         ];
     }
 }

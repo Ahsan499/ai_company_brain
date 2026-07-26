@@ -6,35 +6,35 @@ use Illuminate\Foundation\Http\FormRequest;
 
 class RegisterRequest extends FormRequest
 {
-    /**
-     * Determine if the user is authorized to make this request.
-     */
     public function authorize(): bool
     {
         return true;
     }
 
-    /**
-     * Validation Rules
-     */
+    protected function prepareForValidation(): void
+    {
+        if (! $this->filled('name') && ($this->filled('first_name') || $this->filled('firstName'))) {
+            $first = $this->input('first_name', $this->input('firstName', ''));
+            $last = $this->input('last_name', $this->input('lastName', ''));
+            $this->merge([
+                'name' => trim($first.' '.$last),
+            ]);
+        }
+    }
+
     public function rules(): array
     {
         return [
-            'first_name' => ['required', 'string', 'max:255'],
-            'last_name' => ['required', 'string', 'max:255'],
+            'name' => ['required', 'string', 'max:255'],
             'email' => ['required', 'email', 'unique:users,email'],
             'password' => ['required', 'confirmed', 'min:8'],
         ];
     }
 
-    /**
-     * Custom Validation Messages
-     */
     public function messages(): array
     {
         return [
-            'first_name.required' => 'First name is required.',
-            'last_name.required' => 'Last name is required.',
+            'name.required' => 'Name is required.',
             'email.required' => 'Email is required.',
             'email.email' => 'Enter a valid email address.',
             'email.unique' => 'Email already exists.',

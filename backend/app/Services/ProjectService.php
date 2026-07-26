@@ -2,122 +2,165 @@
 
 namespace App\Services;
 
-use App\Http\Resources\Project\ProjectResource;
+use App\Enums\Priority;
+use App\Enums\ProjectStatus;
+use App\Enums\TaskStatus;
 use App\Models\Project;
+use App\Models\User;
+use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Str;
+use Illuminate\Validation\ValidationException;
 
 class ProjectService
 {
-    protected SearchService $searchService;
-
-    public function __construct(SearchService $searchService)
+    public function index(Request $request, User $actor): LengthAwarePaginator
     {
-        $this->searchService = $searchService;
+        $perPage = min(max((int) $request->integer('per_page', 20), 1), 100);
+
+        $query = Project::query()
+            ->with(['organization', 'department', 'members', 'milestones'])
+            ->withCount($this->taskCountRelations())
+            ->withCount('members')
+            ->withSum('timeEntries', 'duration_minutes')
+            ->search($request->string('search')->toString() ?: $request->string('query')->toString())
+            ->organizationId($request->input('organization_id', $request->input('organizationId')))
+            ->departmentId($request->input('department_id', $request->input('departmentId')))
+            ->status($request->string('status')->toString())
+            ->priority($request->string('priority')->toString())
+            ->latest('id');
+
+        if (! $actor->hasRole('Super Admin')) {
+            $query->where('organization_id', $actor->organization_id);
+        }
+
+        return $query->paginate($perPage);
     }
 
-    /**
-     * Display all projects.
-     */
-    public function index(Request $request)
+    public function show(Project $project): Project
     {
-        $query = Project::with([
-            'organization',
-            'department',
-            'users'
+        return $project->load(['organization', 'department', 'members', 'milestones', 'teams'])
+            ->loadCount($this->taskCountRelations())
+            ->loadCount('members')
+            ->loadSum('timeEntries', 'duration_minutes');
+    }
+
+    public function store(array $data, User $actor): Project
+    {
+        return DB::transaction(function () use ($data, $actor) {
+            $project = Project::query()->create([
+                'organization_id' => $data['organization_id'],
+                'department_id' => $data['department_id'],
+                'name' => $data['name'],
+                'description' => $data['description'] ?? null,
+                'status' => $data['status'] ?? ProjectStatus::Planning->value,
+                'priority' => $data['priority'] ?? Priority::Medium->value,
+                'progress' => $data['progress'] ?? 0,
+                'due_date' => $data['due_date'] ?? null,
+            ]);
+
+            $memberSync = [];
+            foreach ($data['member_ids'] ?? [] as $userId) {
+                $memberSync[$userId] = ['role_in_project' => 'Contributor'];
+            }
+            if (! isset($memberSync[$actor->id])) {
+                $memberSync[$actor->id] = ['role_in_project' => 'Project Lead'];
+            }
+            if ($memberSync) {
+                $project->members()->sync($memberSync);
+            }
+
+            if (! empty($data['team_ids'])) {
+                $project->teams()->sync($data['team_ids']);
+            }
+
+            return $this->show($project);
+        });
+    }
+
+    public function update(Project $project, array $data): Project
+    {
+        return DB::transaction(function () use ($project, $data) {
+            $project->fill([
+                'organization_id' => $data['organization_id'] ?? $project->organization_id,
+                'department_id' => $data['department_id'] ?? $project->department_id,
+                'name' => $data['name'] ?? $project->name,
+                'description' => array_key_exists('description', $data) ? $data['description'] : $project->description,
+                'status' => $data['status'] ?? $project->status,
+                'priority' => $data['priority'] ?? $project->priority,
+                'progress' => array_key_exists('progress', $data) ? $data['progress'] : $project->progress,
+                'due_date' => array_key_exists('due_date', $data) ? $data['due_date'] : $project->due_date,
+            ])->save();
+
+            if (array_key_exists('member_ids', $data)) {
+                $sync = [];
+                foreach ($data['member_ids'] ?? [] as $userId) {
+                    $existing = $project->members()->where('users.id', $userId)->first();
+                    $sync[$userId] = [
+                        'role_in_project' => $existing?->pivot?->role_in_project ?? 'Contributor',
+                    ];
+                }
+                $project->members()->sync($sync);
+            }
+
+            if (array_key_exists('team_ids', $data)) {
+                $project->teams()->sync($data['team_ids'] ?? []);
+            }
+
+            $this->recalculateProgress($project);
+
+            return $this->show($project->fresh());
+        });
+    }
+
+    public function destroy(Project $project): void
+    {
+        $project->delete();
+    }
+
+    public function addMember(Project $project, int $userId, ?string $role): Project
+    {
+        $user = User::query()->findOrFail($userId);
+
+        if ((int) $user->organization_id !== (int) $project->organization_id) {
+            throw ValidationException::withMessages([
+                'user_id' => ['User must belong to the same organization as the project.'],
+            ]);
+        }
+
+        $project->members()->syncWithoutDetaching([
+            $userId => ['role_in_project' => $role ?: 'Contributor'],
         ]);
 
-        return ProjectResource::collection(
-            $this->searchService->apply($query, $request)
-        );
+        return $this->show($project);
     }
 
-    /**
-     * Store a newly created project.
-     */
-    public function store(array $data)
+    public function removeMember(Project $project, int $userId): Project
     {
-        return DB::transaction(function () use ($data) {
+        $project->members()->detach($userId);
 
-            $users = $data['users'] ?? [];
-            unset($data['users']);
-
-            if (empty($data['slug'])) {
-                $data['slug'] = Str::slug($data['name']);
-            }
-
-            $project = Project::create($data);
-
-            if (!empty($users)) {
-                $project->users()->attach($users);
-            }
-
-            $project->load([
-                'organization',
-                'department',
-                'users'
-            ]);
-
-            return new ProjectResource($project);
-        });
+        return $this->show($project);
     }
 
-    /**
-     * Display the specified project.
-     */
-    public function show(int $id)
+    public function recalculateProgress(Project $project): void
     {
-        $project = Project::with([
-            'organization',
-            'department',
-            'users'
-        ])->findOrFail($id);
-
-        return new ProjectResource($project);
+        $total = $project->tasks()->count();
+        $done = $project->tasks()->where('status', TaskStatus::Done->value)->count();
+        $progress = $total > 0 ? (int) round(($done / $total) * 100) : 0;
+        $project->forceFill(['progress' => $progress])->save();
     }
 
-    /**
-     * Update the specified project.
-     */
-    public function update(int $id, array $data)
+    /** @return array<int|string, mixed> */
+    public function taskCountRelations(): array
     {
-        return DB::transaction(function () use ($id, $data) {
-
-            $project = Project::findOrFail($id);
-
-            $users = $data['users'] ?? [];
-            unset($data['users']);
-
-            if (empty($data['slug'])) {
-                $data['slug'] = Str::slug($data['name']);
-            }
-
-            $project->update($data);
-
-            $project->users()->sync($users);
-
-            $project->load([
-                'organization',
-                'department',
-                'users'
-            ]);
-
-            return new ProjectResource($project);
-        });
-    }
-
-    /**
-     * Remove the specified project.
-     */
-    public function destroy(int $id): bool
-    {
-        $project = Project::findOrFail($id);
-
-        $project->users()->detach();
-
-        $project->delete();
-
-        return true;
+        return [
+            'tasks',
+            'tasks as tasks_done_count' => fn ($q) => $q->where('status', TaskStatus::Done->value),
+            'tasks as tasks_in_progress_count' => fn ($q) => $q->where('status', TaskStatus::InProgress->value),
+            'tasks as tasks_overdue_count' => fn ($q) => $q
+                ->whereNotNull('due_date')
+                ->whereDate('due_date', '<', now()->toDateString())
+                ->where('status', '!=', TaskStatus::Done->value),
+        ];
     }
 }

@@ -4,6 +4,7 @@ namespace App\Models;
 
 use App\Enums\Priority;
 use App\Enums\ProjectStatus;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -14,6 +15,62 @@ use Illuminate\Database\Eloquent\SoftDeletes;
 class Project extends Model
 {
     use HasFactory, SoftDeletes;
+
+    public function scopeSearch(Builder $query, ?string $search): Builder
+    {
+        if (! $search) {
+            return $query;
+        }
+
+        $term = '%'.$search.'%';
+
+        return $query->where(function (Builder $q) use ($term) {
+            $q->where('name', 'like', $term)
+                ->orWhere('description', 'like', $term);
+        });
+    }
+
+    public function scopeOrganizationId(Builder $query, mixed $organizationId): Builder
+    {
+        if ($organizationId === null || $organizationId === '' || $organizationId === 'all') {
+            return $query;
+        }
+
+        return $query->where('organization_id', $organizationId);
+    }
+
+    public function scopeDepartmentId(Builder $query, mixed $departmentId): Builder
+    {
+        if ($departmentId === null || $departmentId === '' || $departmentId === 'all') {
+            return $query;
+        }
+
+        return $query->where('department_id', $departmentId);
+    }
+
+    public function scopeStatus(Builder $query, ?string $status): Builder
+    {
+        if (! $status || $status === 'all') {
+            return $query;
+        }
+
+        return $query->where('status', $status);
+    }
+
+    public function scopePriority(Builder $query, ?string $priority): Builder
+    {
+        if (! $priority || $priority === 'all') {
+            return $query;
+        }
+
+        return $query->where('priority', $priority);
+    }
+
+    public function isMember(int $userId): bool
+    {
+        return $this->members()->where('users.id', $userId)->exists();
+    }
+
 
     protected $fillable = [
         'organization_id',

@@ -4,6 +4,7 @@ namespace App\Models;
 
 use App\Enums\OrganizationPlan;
 use App\Enums\OrganizationStatus;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -13,6 +14,42 @@ use Illuminate\Database\Eloquent\SoftDeletes;
 class Organization extends Model
 {
     use HasFactory, SoftDeletes;
+
+    public function scopeSearch(Builder $query, ?string $search): Builder
+    {
+        if (! $search) {
+            return $query;
+        }
+
+        $term = '%'.$search.'%';
+
+        return $query->where(function (Builder $q) use ($term) {
+            $q->where('name', 'like', $term)
+                ->orWhere('industry', 'like', $term)
+                ->orWhere('location', 'like', $term)
+                ->orWhere('slug', 'like', $term)
+                ->orWhereHas('owner', fn (Builder $owner) => $owner->where('name', 'like', $term));
+        });
+    }
+
+    public function scopeStatus(Builder $query, ?string $status): Builder
+    {
+        if (! $status || $status === 'all') {
+            return $query;
+        }
+
+        return $query->where('status', $status);
+    }
+
+    public function scopePlan(Builder $query, ?string $plan): Builder
+    {
+        if (! $plan || $plan === 'all') {
+            return $query;
+        }
+
+        return $query->where('plan', $plan);
+    }
+
 
     protected $fillable = [
         'name',

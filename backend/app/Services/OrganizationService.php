@@ -2,122 +2,140 @@
 
 namespace App\Services;
 
-use App\Http\Resources\Organization\OrganizationResource;
+use App\Enums\OrganizationPlan;
+use App\Enums\OrganizationStatus;
 use App\Models\Organization;
-use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Str;
+use App\Models\User;
+use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Http\Request;
+use Illuminate\Support\Str;
 
 class OrganizationService
 {
-    protected SearchService $searchService;
-    protected AuditLogService $auditLogService;
+    public function index(Request $request, User $actor): LengthAwarePaginator
+    {
+        $perPage = min(max((int) $request->integer('per_page', 20), 1), 100);
 
-    public function __construct(
-        SearchService $searchService,
-        AuditLogService $auditLogService
-    ) {
-        $this->searchService = $searchService;
-        $this->auditLogService = $auditLogService;
+        $query = Organization::query()
+            ->with('owner')
+            ->withCount([
+                'users',
+                'departments',
+                'projects',
+                'projects as active_projects_count' => fn ($q) => $q->where('status', 'active'),
+            ])
+            ->search($request->string('search')->toString() ?: $request->string('query')->toString())
+            ->status($request->string('status')->toString())
+            ->plan($request->string('plan')->toString())
+            ->latest('id');
+
+        if (! $actor->hasRole('Super Admin')) {
+            $query->whereKey($actor->organization_id);
+        }
+
+        return $query->paginate($perPage);
     }
 
-    /**
-     * Get all organizations.
-     */
-    public function index(Request $request)
+    public function show(Organization $organization): Organization
     {
-        $query = Organization::query();
-
-        return OrganizationResource::collection(
-            $this->searchService->apply($query, $request)
-        );
+        return $organization->load(['owner', 'users.department', 'users.roles'])
+            ->loadCount([
+                'users',
+                'departments',
+                'projects',
+                'projects as active_projects_count' => fn ($q) => $q->where('status', 'active'),
+            ]);
     }
 
-    /**
-     * Store organization.
-     */
-    public function store(array $data)
+    public function store(array $data): Organization
     {
-        return DB::transaction(function () use ($data) {
+        $ownerId = $data['owner_id'] ?? null;
+        if (! $ownerId && ! empty($data['owner_email'])) {
+            $ownerId = User::query()->where('email', $data['owner_email'])->value('id');
+        }
 
-            if (empty($data['slug'])) {
-                $data['slug'] = Str::slug($data['name']);
-            }
+        $name = $data['name'];
+        $slug = $data['slug'] ?? Str::slug($name);
+        $slug = $this->uniqueSlug($slug);
 
-            $organization = Organization::create($data);
+        $organization = Organization::query()->create([
+            'name' => $name,
+            'slug' => $slug,
+            'industry' => $data['industry'] ?? null,
+            'size' => $data['size'] ?? '11–50',
+            'plan' => $data['plan'] ?? OrganizationPlan::Growth->value,
+            'status' => $data['status'] ?? OrganizationStatus::Active->value,
+            'website' => $data['website'] ?? null,
+            'location' => $data['location'] ?? null,
+            'description' => $data['description'] ?? null,
+            'initials' => $data['initials'] ?? $this->initialsFromName($name),
+            'owner_id' => $ownerId,
+        ]);
 
-            // Audit Log
-            $this->auditLogService->log(
-                'created',
-                $organization,
-                null,
-                $organization->toArray()
-            );
-
-            return new OrganizationResource($organization);
-        });
+        return $this->show($organization);
     }
 
-    /**
-     * Get single organization.
-     */
-    public function show($id)
+    public function update(Organization $organization, array $data): Organization
     {
-        $organization = Organization::findOrFail($id);
+        $ownerId = $data['owner_id'] ?? $organization->owner_id;
+        if (array_key_exists('owner_email', $data) && $data['owner_email']) {
+            $ownerId = User::query()->where('email', $data['owner_email'])->value('id') ?? $ownerId;
+        }
 
-        return new OrganizationResource($organization);
+        if (isset($data['slug'])) {
+            $data['slug'] = $this->uniqueSlug($data['slug'], $organization->id);
+        }
+
+        $organization->fill([
+            'name' => $data['name'] ?? $organization->name,
+            'slug' => $data['slug'] ?? $organization->slug,
+            'industry' => array_key_exists('industry', $data) ? $data['industry'] : $organization->industry,
+            'size' => array_key_exists('size', $data) ? $data['size'] : $organization->size,
+            'plan' => $data['plan'] ?? $organization->plan,
+            'status' => $data['status'] ?? $organization->status,
+            'website' => array_key_exists('website', $data) ? $data['website'] : $organization->website,
+            'location' => array_key_exists('location', $data) ? $data['location'] : $organization->location,
+            'description' => array_key_exists('description', $data) ? $data['description'] : $organization->description,
+            'initials' => $data['initials'] ?? $organization->initials,
+            'owner_id' => $ownerId,
+        ])->save();
+
+        return $this->show($organization->fresh());
     }
 
-    /**
-     * Update organization.
-     */
-    public function update($id, array $data)
+    public function destroy(Organization $organization): void
     {
-        return DB::transaction(function () use ($id, $data) {
-
-            $organization = Organization::findOrFail($id);
-
-            // Save old values
-            $oldValues = $organization->toArray();
-
-            if (empty($data['slug'])) {
-                $data['slug'] = Str::slug($data['name']);
-            }
-
-            $organization->update($data);
-
-            // Audit Log
-            $this->auditLogService->log(
-                'updated',
-                $organization,
-                $oldValues,
-                $organization->fresh()->toArray()
-            );
-
-            return new OrganizationResource($organization);
-        });
-    }
-
-    /**
-     * Delete organization.
-     */
-    public function destroy($id)
-    {
-        $organization = Organization::findOrFail($id);
-
-        // Save old values
-        $oldValues = $organization->toArray();
-
-        // Audit Log
-        $this->auditLogService->log(
-            'deleted',
-            $organization,
-            $oldValues,
-            null
-        );
-
         $organization->delete();
+    }
 
-        return true;
+    private function uniqueSlug(string $slug, ?int $ignoreId = null): string
+    {
+        $base = Str::slug($slug) ?: 'org';
+        $candidate = $base;
+        $i = 1;
+
+        while (
+            Organization::withTrashed()
+                ->when($ignoreId, fn ($q) => $q->where('id', '!=', $ignoreId))
+                ->where('slug', $candidate)
+                ->exists()
+        ) {
+            $candidate = $base.'-'.$i;
+            $i++;
+        }
+
+        return $candidate;
+    }
+
+    private function initialsFromName(string $name): string
+    {
+        $parts = preg_split('/\s+/', trim($name)) ?: [];
+        $initials = collect($parts)
+            ->filter()
+            ->take(2)
+            ->map(fn ($p) => Str::upper(Str::substr($p, 0, 1)))
+            ->implode('');
+
+        return $initials !== '' ? $initials : 'OR';
     }
 }
