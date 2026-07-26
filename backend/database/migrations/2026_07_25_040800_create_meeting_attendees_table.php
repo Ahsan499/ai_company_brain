@@ -8,18 +8,18 @@ return new class extends Migration
 {
     public function up(): void
     {
-        Schema::create('project_user', function (Blueprint $table) {
+        Schema::create('meeting_attendees', function (Blueprint $table) {
             $table->id();
-            $table->foreignId('project_id')->constrained()->cascadeOnDelete();
+            $table->foreignId('meeting_id')->constrained()->cascadeOnDelete();
             $table->foreignId('user_id')->constrained()->cascadeOnDelete();
-            $table->string('role_in_project')->nullable();
+            $table->string('rsvp_status')->default('pending'); // RsvpStatus
             $table->timestamps();
-            $table->unique(['project_id', 'user_id']);
+            $table->unique(['meeting_id', 'user_id']);
         });
     }
 
     public function down(): void
     {
-        Schema::dropIfExists('project_user');
+        Schema::dropIfExists('meeting_attendees');
     }
 };

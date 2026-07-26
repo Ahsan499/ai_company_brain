@@ -6,35 +6,30 @@ use Illuminate\Support\Facades\Schema;
 
 return new class extends Migration
 {
-    /**
-     * Run the migrations.
-     */
     public function up(): void
     {
         Schema::create('organizations', function (Blueprint $table) {
             $table->id();
-
             $table->string('name');
             $table->string('slug')->unique();
-
-            $table->string('email')->nullable();
-            $table->string('phone')->nullable();
-
-            $table->text('address')->nullable();
-
+            $table->string('industry')->nullable();
+            $table->string('size')->nullable();
+            $table->string('plan')->default('starter'); // OrganizationPlan
+            $table->string('status')->default('active'); // OrganizationStatus
+            $table->string('website')->nullable();
+            $table->string('location')->nullable();
+            $table->text('description')->nullable();
             $table->string('logo')->nullable();
-
-            $table->boolean('is_active')->default(true);
-
+            $table->string('initials', 8)->nullable();
+            $table->foreignId('owner_id')
+                ->nullable()
+                ->constrained('users')
+                ->nullOnDelete();
             $table->timestamps();
-
             $table->softDeletes();
         });
     }
 
-    /**
-     * Reverse the migrations.
-     */
     public function down(): void
     {
         Schema::dropIfExists('organizations');

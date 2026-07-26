@@ -6,73 +6,28 @@ use Illuminate\Support\Facades\Schema;
 
 return new class extends Migration
 {
-    /**
-     * Run the migrations.
-     */
     public function up(): void
     {
         Schema::create('tasks', function (Blueprint $table) {
-
             $table->id();
-
-            // Relationships
-            $table->foreignId('organization_id')
-                ->constrained()
-                ->cascadeOnDelete();
-
-            $table->foreignId('department_id')
-                ->constrained()
-                ->cascadeOnDelete();
-
-            $table->foreignId('project_id')
-                ->constrained()
-                ->cascadeOnDelete();
-
-            $table->foreignId('assigned_to')
-                ->constrained('users')
-                ->cascadeOnDelete();
-
-            // Task Details
+            $table->foreignId('organization_id')->constrained()->cascadeOnDelete();
+            $table->foreignId('department_id')->nullable()->constrained()->nullOnDelete();
+            $table->foreignId('project_id')->constrained()->cascadeOnDelete();
+            $table->foreignId('assignee_id')->nullable()->constrained('users')->nullOnDelete();
+            $table->foreignId('created_by')->nullable()->constrained('users')->nullOnDelete();
             $table->string('title');
-
             $table->text('description')->nullable();
-
-            // Status
-            $table->enum('status', [
-                'Pending',
-                'In Progress',
-                'Completed',
-                'Cancelled',
-            ])->default('Pending');
-
-            // Priority
-            $table->enum('priority', [
-                'Low',
-                'Medium',
-                'High',
-            ])->default('Medium');
-
-            // Dates
+            $table->string('status')->default('todo'); // TaskStatus
+            $table->string('priority')->default('medium'); // Priority
             $table->date('due_date')->nullable();
-
-            // Active Flag
-            $table->boolean('is_active')->default(true);
-
             $table->timestamps();
+            $table->softDeletes();
 
-            // Optional Indexes (recommended)
-            $table->index('organization_id');
-            $table->index('department_id');
-            $table->index('project_id');
-            $table->index('assigned_to');
-            $table->index('status');
-            $table->index('priority');
+            $table->index(['project_id', 'status']);
+            $table->index(['assignee_id', 'status']);
         });
     }
 
-    /**
-     * Reverse the migrations.
-     */
     public function down(): void
     {
         Schema::dropIfExists('tasks');

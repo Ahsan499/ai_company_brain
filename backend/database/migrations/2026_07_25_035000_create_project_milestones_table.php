@@ -8,18 +8,19 @@ return new class extends Migration
 {
     public function up(): void
     {
-        Schema::create('project_user', function (Blueprint $table) {
+        Schema::create('project_milestones', function (Blueprint $table) {
             $table->id();
             $table->foreignId('project_id')->constrained()->cascadeOnDelete();
-            $table->foreignId('user_id')->constrained()->cascadeOnDelete();
-            $table->string('role_in_project')->nullable();
+            $table->string('title');
+            $table->date('due_date')->nullable();
+            $table->boolean('done')->default(false);
+            $table->unsignedSmallInteger('sort_order')->default(0);
             $table->timestamps();
-            $table->unique(['project_id', 'user_id']);
         });
     }
 
     public function down(): void
     {
-        Schema::dropIfExists('project_user');
+        Schema::dropIfExists('project_milestones');
     }
 };

@@ -4,52 +4,49 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class TimeEntry extends Model
 {
     use HasFactory;
 
     protected $fillable = [
-        'organization_id',
-        'project_id',
-        'task_id',
         'user_id',
-        'description',
-        'start_time',
-        'end_time',
-        'duration',
-        'is_active',
+        'task_id',
+        'project_id',
+        'team_id',
+        'date',
+        'duration_minutes',
+        'note',
+        'billable',
     ];
 
-    protected $casts = [
-        'start_time' => 'datetime',
-        'end_time' => 'datetime',
-        'is_active' => 'boolean',
-    ];
-
-    /*
-    |--------------------------------------------------------------------------
-    | Relationships
-    |--------------------------------------------------------------------------
-    */
-
-    public function organization()
+    protected function casts(): array
     {
-        return $this->belongsTo(Organization::class);
+        return [
+            'date' => 'date',
+            'duration_minutes' => 'integer',
+            'billable' => 'boolean',
+        ];
     }
 
-    public function project()
+    public function user(): BelongsTo
     {
-        return $this->belongsTo(Project::class);
+        return $this->belongsTo(User::class);
     }
 
-    public function task()
+    public function task(): BelongsTo
     {
         return $this->belongsTo(Task::class);
     }
 
-    public function user()
+    public function project(): BelongsTo
     {
-        return $this->belongsTo(User::class);
+        return $this->belongsTo(Project::class);
+    }
+
+    public function team(): BelongsTo
+    {
+        return $this->belongsTo(Team::class);
     }
 }

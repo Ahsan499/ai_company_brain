@@ -2,59 +2,73 @@
 
 namespace App\Models;
 
-use Illuminate\Database\Eloquent\Model;
+use App\Enums\OrganizationPlan;
+use App\Enums\OrganizationStatus;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
-use App\Models\Department;
-use App\Models\User;
-use App\Models\Project;
+use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\SoftDeletes;
 
 class Organization extends Model
 {
-    use HasFactory;
+    use HasFactory, SoftDeletes;
 
     protected $fillable = [
         'name',
         'slug',
-        'email',
-        'phone',
-        'address',
+        'industry',
+        'size',
+        'plan',
+        'status',
+        'website',
+        'location',
+        'description',
         'logo',
-        'is_active',
+        'initials',
+        'owner_id',
     ];
 
-    protected $casts = [
-        'is_active' => 'boolean',
-    ];
+    protected function casts(): array
+    {
+        return [
+            'plan' => OrganizationPlan::class,
+            'status' => OrganizationStatus::class,
+        ];
+    }
 
-    public function users()
+    public function owner(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'owner_id');
+    }
+
+    public function users(): HasMany
     {
         return $this->hasMany(User::class);
     }
 
-    public function departments()
+    public function departments(): HasMany
     {
         return $this->hasMany(Department::class);
     }
 
-    public function projects()
-    {
-        return $this->hasMany(Project::class);
-    }
-    public function tasks()
-    {
-        return $this->hasMany(Task::class);
-    }
-
-    public function teams()
+    public function teams(): HasMany
     {
         return $this->hasMany(Team::class);
     }
-    public function meetings()
+
+    public function projects(): HasMany
     {
-        return $this->hasMany(Meeting::class);
+        return $this->hasMany(Project::class);
     }
-    public function notifications()
+
+    public function folders(): HasMany
     {
-        return $this->hasMany(Notification::class);
+        return $this->hasMany(Folder::class);
+    }
+
+    public function files(): HasMany
+    {
+        return $this->hasMany(File::class);
     }
 }

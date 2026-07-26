@@ -6,31 +6,28 @@ use Illuminate\Support\Facades\Schema;
 
 return new class extends Migration
 {
-    /**
-     * Run the migrations.
-     */
     public function up(): void
     {
         Schema::create('departments', function (Blueprint $table) {
             $table->id();
-
             $table->foreignId('organization_id')
                 ->constrained()
                 ->cascadeOnDelete();
-
             $table->string('name');
-            $table->string('slug')->unique();
             $table->text('description')->nullable();
-
-            $table->boolean('is_active')->default(true);
-
+            $table->string('status')->default('active'); // DepartmentStatus
+            $table->foreignId('manager_id')
+                ->nullable()
+                ->constrained('users')
+                ->nullOnDelete();
+            $table->unsignedSmallInteger('avg_tenure_months')->nullable();
             $table->timestamps();
+            $table->softDeletes();
+
+            $table->unique(['organization_id', 'name']);
         });
     }
 
-    /**
-     * Reverse the migrations.
-     */
     public function down(): void
     {
         Schema::dropIfExists('departments');

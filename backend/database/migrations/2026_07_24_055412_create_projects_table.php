@@ -6,50 +6,26 @@ use Illuminate\Support\Facades\Schema;
 
 return new class extends Migration
 {
-    /**
-     * Run the migrations.
-     */
     public function up(): void
     {
         Schema::create('projects', function (Blueprint $table) {
-
             $table->id();
-
-            $table->foreignId('organization_id')
-                ->constrained()
-                ->cascadeOnDelete();
-
-            $table->foreignId('department_id')
-                ->constrained()
-                ->cascadeOnDelete();
-
+            $table->foreignId('organization_id')->constrained()->cascadeOnDelete();
+            $table->foreignId('department_id')->constrained()->cascadeOnDelete();
             $table->string('name');
-
-            $table->string('slug')->unique();
-
             $table->text('description')->nullable();
-
-            $table->date('start_date')->nullable();
-
-            $table->date('end_date')->nullable();
-
-            $table->enum('status', [
-                'Planning',
-                'Active',
-                'Completed',
-                'On Hold',
-                'Cancelled'
-            ])->default('Planning');
-
-            $table->boolean('is_active')->default(true);
-
+            $table->string('status')->default('planning'); // ProjectStatus
+            $table->string('priority')->default('medium'); // Priority
+            $table->unsignedTinyInteger('progress')->default(0);
+            $table->date('due_date')->nullable();
             $table->timestamps();
+            $table->softDeletes();
+
+            $table->index(['organization_id', 'status']);
+            $table->index(['department_id', 'status']);
         });
     }
 
-    /**
-     * Reverse the migrations.
-     */
     public function down(): void
     {
         Schema::dropIfExists('projects');

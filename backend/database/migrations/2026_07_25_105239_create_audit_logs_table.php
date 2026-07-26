@@ -6,50 +6,30 @@ use Illuminate\Support\Facades\Schema;
 
 return new class extends Migration
 {
-    /**
-     * Run the migrations.
-     */
     public function up(): void
     {
         Schema::create('audit_logs', function (Blueprint $table) {
-
             $table->id();
-
-            $table->foreignId('user_id')
+            $table->foreignId('actor_id')
                 ->nullable()
-                ->constrained()
+                ->constrained('users')
                 ->nullOnDelete();
+            $table->string('action'); // AuditAction
+            $table->string('entity_type'); // module / morph type label
+            $table->unsignedBigInteger('entity_id')->nullable();
+            $table->string('entity_name')->nullable();
+            $table->json('diff')->nullable();
+            $table->json('metadata')->nullable();
+            $table->string('ip_address', 45)->nullable();
+            $table->string('device')->nullable();
+            $table->timestamp('created_at')->useCurrent();
 
-            $table->string('module');
-
-            $table->unsignedBigInteger('record_id');
-
-            $table->enum('action', [
-                'created',
-                'updated',
-                'deleted',
-            ]);
-
-            $table->json('old_values')->nullable();
-
-            $table->json('new_values')->nullable();
-
-            $table->ipAddress('ip_address')->nullable();
-
-            $table->text('user_agent')->nullable();
-
-            $table->timestamps();
-
-            // Indexes
-            $table->index('module');
-            $table->index('record_id');
+            $table->index(['entity_type', 'entity_id']);
+            $table->index(['actor_id', 'created_at']);
             $table->index('action');
         });
     }
 
-    /**
-     * Reverse the migrations.
-     */
     public function down(): void
     {
         Schema::dropIfExists('audit_logs');

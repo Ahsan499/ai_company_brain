@@ -2,53 +2,62 @@
 
 namespace App\Models;
 
-use Illuminate\Database\Eloquent\Model;
+use App\Enums\DepartmentStatus;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\BelongsToMany;
+use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\SoftDeletes;
 
 class Department extends Model
 {
-    use HasFactory;
+    use HasFactory, SoftDeletes;
 
     protected $fillable = [
         'organization_id',
         'name',
-        'slug',
         'description',
-        'is_active',
+        'status',
+        'manager_id',
+        'avg_tenure_months',
     ];
 
-    protected $casts = [
-        'is_active' => 'boolean',
-    ];
+    protected function casts(): array
+    {
+        return [
+            'status' => DepartmentStatus::class,
+            'avg_tenure_months' => 'integer',
+        ];
+    }
 
-    /**
-     * Department belongs to an Organization.
-     */
-    public function organization()
+    public function organization(): BelongsTo
     {
         return $this->belongsTo(Organization::class);
     }
 
-    /**
-     * Department has many Users.
-     */
-    public function users()
+    public function manager(): BelongsTo
     {
-        return $this->hasMany(User::class);
+        return $this->belongsTo(User::class, 'manager_id');
     }
 
-    public function tasks()
+    public function members(): BelongsToMany
     {
-        return $this->hasMany(Task::class);
+        return $this->belongsToMany(User::class)->withTimestamps();
     }
 
-    public function teams()
+    public function teams(): HasMany
     {
         return $this->hasMany(Team::class);
-    }    
+    }
 
-    public function meetings()
+    public function projects(): HasMany
     {
-        return $this->hasMany(Meeting::class);
+        return $this->hasMany(Project::class);
+    }
+
+    public function users(): HasMany
+    {
+        return $this->hasMany(User::class);
     }
 }

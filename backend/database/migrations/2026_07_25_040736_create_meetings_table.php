@@ -6,58 +6,33 @@ use Illuminate\Support\Facades\Schema;
 
 return new class extends Migration
 {
-    /**
-     * Run the migrations.
-     */
     public function up(): void
     {
         Schema::create('meetings', function (Blueprint $table) {
-
             $table->id();
-
-            $table->foreignId('organization_id')
-                ->constrained()
-                ->cascadeOnDelete();
-
-            $table->foreignId('department_id')
-                ->constrained()
-                ->cascadeOnDelete();
-
-            $table->foreignId('project_id')
-                ->constrained()
-                ->cascadeOnDelete();
-
-            $table->foreignId('team_id')
-                ->constrained()
-                ->cascadeOnDelete();
-
+            $table->foreignId('organization_id')->nullable()->constrained()->nullOnDelete();
+            $table->foreignId('project_id')->nullable()->constrained()->nullOnDelete();
+            $table->foreignId('team_id')->nullable()->constrained()->nullOnDelete();
+            $table->foreignId('organizer_id')->constrained('users')->cascadeOnDelete();
+            $table->foreignId('created_by')->nullable()->constrained('users')->nullOnDelete();
             $table->string('title');
-
             $table->text('description')->nullable();
-
-            $table->date('meeting_date');
-
+            $table->text('notes')->nullable();
+            $table->date('date');
             $table->time('start_time');
-
-            $table->time('end_time')->nullable();
-
+            $table->unsignedSmallInteger('duration_minutes')->default(30);
+            $table->string('status')->default('upcoming'); // MeetingStatus
+            $table->string('type')->default('video'); // MeetingType
             $table->string('location')->nullable();
-
-            $table->enum('status', [
-                'Scheduled',
-                'Completed',
-                'Cancelled',
-            ])->default('Scheduled');
-
-            $table->boolean('is_active')->default(true);
-
+            $table->string('join_url')->nullable();
+            $table->string('recurring')->nullable();
             $table->timestamps();
+            $table->softDeletes();
+
+            $table->index(['date', 'status']);
         });
     }
 
-    /**
-     * Reverse the migrations.
-     */
     public function down(): void
     {
         Schema::dropIfExists('meetings');

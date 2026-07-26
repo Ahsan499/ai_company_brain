@@ -2,50 +2,82 @@
 
 namespace App\Models;
 
-use Illuminate\Database\Eloquent\Model;
+use App\Enums\MeetingStatus;
+use App\Enums\MeetingType;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\BelongsToMany;
+use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\SoftDeletes;
 
 class Meeting extends Model
 {
-    use HasFactory;
+    use HasFactory, SoftDeletes;
 
     protected $fillable = [
         'organization_id',
-        'department_id',
         'project_id',
         'team_id',
+        'organizer_id',
+        'created_by',
         'title',
         'description',
-        'meeting_date',
+        'notes',
+        'date',
         'start_time',
-        'end_time',
-        'location',
+        'duration_minutes',
         'status',
-        'is_active',
+        'type',
+        'location',
+        'join_url',
+        'recurring',
     ];
 
-    protected $casts = [
-        'meeting_date' => 'date',
-        'is_active' => 'boolean',
-    ];
+    protected function casts(): array
+    {
+        return [
+            'date' => 'date',
+            'duration_minutes' => 'integer',
+            'status' => MeetingStatus::class,
+            'type' => MeetingType::class,
+        ];
+    }
 
-    public function organization()
+    public function organization(): BelongsTo
     {
         return $this->belongsTo(Organization::class);
     }
 
-    public function department()
-    {
-        return $this->belongsTo(Department::class);
-    }
-
-    public function project()
+    public function project(): BelongsTo
     {
         return $this->belongsTo(Project::class);
     }
 
-    public function team()
+    public function team(): BelongsTo
     {
         return $this->belongsTo(Team::class);
+    }
+
+    public function organizer(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'organizer_id');
+    }
+
+    public function creator(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'created_by');
+    }
+
+    public function attendees(): BelongsToMany
+    {
+        return $this->belongsToMany(User::class, 'meeting_attendees')
+            ->withPivot('rsvp_status')
+            ->withTimestamps();
+    }
+
+    public function agendaItems(): HasMany
+    {
+        return $this->hasMany(MeetingAgendaItem::class)->orderBy('sort_order');
     }
 }

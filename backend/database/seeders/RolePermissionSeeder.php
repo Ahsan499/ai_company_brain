@@ -3,44 +3,32 @@
 namespace Database\Seeders;
 
 use Illuminate\Database\Seeder;
-use Spatie\Permission\Models\Role;
 use Spatie\Permission\Models\Permission;
+use Spatie\Permission\Models\Role;
+use Spatie\Permission\PermissionRegistrar;
 
 class RolePermissionSeeder extends Seeder
 {
-    /**
-     * Run the database seeds.
-     */
     public function run(): void
     {
-        app()[\Spatie\Permission\PermissionRegistrar::class]->forgetCachedPermissions();
-
-        /*
-        |--------------------------------------------------------------------------
-        | Permissions
-        |--------------------------------------------------------------------------
-        */
+        app()[PermissionRegistrar::class]->forgetCachedPermissions();
 
         $permissions = [
-
-            // Users
-            'user.view',
-            'user.create',
-            'user.update',
-            'user.delete',
-
-            // Roles
-            'role.view',
-            'role.create',
-            'role.update',
-            'role.delete',
-
-            // Permissions
-            'permission.view',
-            'permission.create',
-            'permission.update',
-            'permission.delete',
-
+            'manage_users',
+            'manage_organizations',
+            'manage_departments',
+            'manage_teams',
+            'manage_projects',
+            'delete_projects',
+            'manage_tasks',
+            'manage_meetings',
+            'manage_files',
+            'manage_time_tracking',
+            'manage_settings',
+            'manage_roles',
+            'view_billing',
+            'view_reports',
+            'view_audit_logs',
         ];
 
         foreach ($permissions as $permission) {
@@ -50,51 +38,91 @@ class RolePermissionSeeder extends Seeder
             ]);
         }
 
-        /*
-        |--------------------------------------------------------------------------
-        | Roles
-        |--------------------------------------------------------------------------
-        */
+        $roles = [
+            'Super Admin',
+            'Organization Owner',
+            'Organization Admin',
+            'Department Manager',
+            'Team Lead',
+            'Employee',
+            'HR',
+            'Guest',
+        ];
 
-        $superAdmin = Role::firstOrCreate([
-            'name' => 'Super Admin',
-            'guard_name' => 'web',
+        foreach ($roles as $roleName) {
+            Role::firstOrCreate([
+                'name' => $roleName,
+                'guard_name' => 'web',
+            ]);
+        }
+
+        Role::findByName('Super Admin')->syncPermissions(Permission::all());
+
+        Role::findByName('Organization Owner')->syncPermissions([
+            'manage_users',
+            'manage_organizations',
+            'manage_departments',
+            'manage_teams',
+            'manage_projects',
+            'delete_projects',
+            'manage_tasks',
+            'manage_meetings',
+            'manage_files',
+            'manage_time_tracking',
+            'manage_settings',
+            'manage_roles',
+            'view_billing',
+            'view_reports',
+            'view_audit_logs',
         ]);
 
-        $organizationAdmin = Role::firstOrCreate([
-            'name' => 'Organization Admin',
-            'guard_name' => 'web',
+        Role::findByName('Organization Admin')->syncPermissions([
+            'manage_users',
+            'manage_departments',
+            'manage_teams',
+            'manage_projects',
+            'delete_projects',
+            'manage_tasks',
+            'manage_meetings',
+            'manage_files',
+            'manage_time_tracking',
+            'manage_settings',
+            'view_reports',
+            'view_audit_logs',
         ]);
 
-        $manager = Role::firstOrCreate([
-            'name' => 'Manager',
-            'guard_name' => 'web',
+        Role::findByName('Department Manager')->syncPermissions([
+            'manage_teams',
+            'manage_projects',
+            'delete_projects',
+            'manage_tasks',
+            'manage_meetings',
+            'manage_files',
+            'manage_time_tracking',
+            'view_reports',
         ]);
 
-        $employee = Role::firstOrCreate([
-            'name' => 'Employee',
-            'guard_name' => 'web',
+        Role::findByName('Team Lead')->syncPermissions([
+            'manage_tasks',
+            'manage_meetings',
+            'manage_files',
+            'manage_time_tracking',
+            'view_reports',
         ]);
 
-        /*
-        |--------------------------------------------------------------------------
-        | Assign Permissions
-        |--------------------------------------------------------------------------
-        */
-
-        $superAdmin->givePermissionTo(Permission::all());
-
-        $organizationAdmin->givePermissionTo([
-            'user.view',
-            'user.create',
-            'user.update',
-            'role.view',
+        Role::findByName('Employee')->syncPermissions([
+            'manage_tasks',
+            'manage_files',
+            'manage_time_tracking',
         ]);
 
-        $manager->givePermissionTo([
-            'user.view',
+        Role::findByName('HR')->syncPermissions([
+            'manage_users',
+            'manage_departments',
+            'manage_meetings',
+            'view_reports',
         ]);
 
-        // Employee gets no permissions by default
+        Role::findByName('Guest')->syncPermissions([]);
     }
 }
