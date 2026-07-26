@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { AnimatePresence, motion } from 'framer-motion';
 import {
@@ -14,6 +14,8 @@ import {
   UsersRound,
 } from 'lucide-react';
 import Button from '../../components/ui/Button';
+import Skeleton from '../../components/ui/Skeleton';
+import ErrorState from '../../components/ui/ErrorState';
 import EmptyState from '../../components/dashboard/EmptyState';
 import UserTable from '../../components/users/UserTable';
 import DepartmentTabs from '../../components/departments/DepartmentTabs';
@@ -22,35 +24,92 @@ import ManagerBadge from '../../components/departments/ManagerBadge';
 import ProjectCard from '../../components/projects/ProjectCard';
 import TeamCard from '../../components/teams/TeamCard';
 import StatusBadge from '../../components/users/StatusBadge';
+import { formatDeptDate } from '../../components/departments/departmentData';
 import {
-  getDepartmentById,
-  formatDeptDate,
-} from '../../components/departments/departmentData';
-import { USERS } from '../../components/users/userData';
-import { getProjectsByDepartment } from '../../components/projects/projectData';
-import { getTeamsByDepartment } from '../../components/teams/teamData';
+  useDepartment,
+  useDepartmentMembers,
+  useDepartmentProjects,
+  useDepartmentTeams,
+  useUpdateDepartment,
+} from '../../hooks/useDepartments';
+import { getApiErrorMessage } from '../../lib/api';
 
 const DepartmentDetail = () => {
   const { id } = useParams();
   const navigate = useNavigate();
-  const dept = useMemo(() => getDepartmentById(id), [id]);
+  const { data: dept, isLoading, isError, error, refetch } = useDepartment(id);
+  const { data: membersData, isLoading: membersLoading } = useDepartmentMembers(id);
+  const { data: teamsData, isLoading: teamsLoading } = useDepartmentTeams(id);
+  const { data: projectsData, isLoading: projectsLoading } = useDepartmentProjects(id);
+  const updateDepartment = useUpdateDepartment();
+
   const [tab, setTab] = useState('overview');
   const [selectedIds, setSelectedIds] = useState([]);
+  const [actionError, setActionError] = useState('');
+  const [editName, setEditName] = useState('');
+  const [editDescription, setEditDescription] = useState('');
+  const [editStatus, setEditStatus] = useState('active');
 
-  const members = useMemo(() => {
-    if (!dept) return [];
-    return USERS.filter((u) => dept.memberIds.includes(u.id));
+  const members = membersData?.data ?? [];
+  const deptTeams = teamsData?.data ?? [];
+  const deptProjects = projectsData?.data ?? [];
+
+  useEffect(() => {
+    if (!dept) return;
+    setEditName(dept.name || '');
+    setEditDescription(dept.description || '');
+    setEditStatus(dept.status || 'active');
   }, [dept]);
 
-  const deptProjects = useMemo(
-    () => (dept ? getProjectsByDepartment(dept.id) : []),
-    [dept]
-  );
+  const openEdit = () => {
+    if (!dept) return;
+    setEditName(dept.name || '');
+    setEditDescription(dept.description || '');
+    setEditStatus(dept.status || 'active');
+    setTab('settings');
+    setActionError('');
+  };
 
-  const deptTeams = useMemo(
-    () => (dept ? getTeamsByDepartment(dept.id) : []),
-    [dept]
-  );
+  const saveEdits = async () => {
+    if (!dept) return;
+    setActionError('');
+    try {
+      await updateDepartment.mutateAsync({
+        id: dept.id,
+        name: editName.trim() || dept.name,
+        description: editDescription,
+        status: editStatus,
+      });
+    } catch (err) {
+      setActionError(getApiErrorMessage(err, 'Could not update department.'));
+    }
+  };
+
+  if (isLoading) {
+    return (
+      <div className="mx-auto max-w-[1600px] space-y-5">
+        <Skeleton className="h-4 w-28" />
+        <Skeleton className="h-40 w-full" rounded="rounded-[24px]" />
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          <Skeleton className="h-24" rounded="rounded-[18px]" />
+          <Skeleton className="h-24" rounded="rounded-[18px]" />
+          <Skeleton className="h-24" rounded="rounded-[18px]" />
+        </div>
+      </div>
+    );
+  }
+
+  if (isError) {
+    return (
+      <div className="mx-auto max-w-lg py-10">
+        <ErrorState
+          title="Couldn’t load department"
+          message={error?.response?.data?.message || error?.message}
+          onRetry={() => refetch()}
+        />
+      </div>
+    );
+  }
 
   if (!dept) {
     return (
@@ -73,6 +132,9 @@ const DepartmentDetail = () => {
       </div>
     );
   }
+
+  const memberCount = dept.memberCount ?? dept.memberIds?.length ?? members.length;
+  const projectCount = dept.projectCount ?? deptProjects.length;
 
   const toggle = (uid) => {
     setSelectedIds((prev) =>
@@ -150,6 +212,7 @@ const DepartmentDetail = () => {
             <Button
               type="button"
               variant="primary"
+              onClick={openEdit}
               className="h-10 rounded-xl text-[13px] font-semibold shadow-[0_6px_16px_rgba(37,99,235,0.25)] self-start"
             >
               Edit Department
@@ -162,9 +225,9 @@ const DepartmentDetail = () => {
         value={tab}
         onChange={setTab}
         counts={{
-          members: members.length,
-          teams: deptTeams.length,
-          projects: deptProjects.length,
+          members: members.length || memberCount,
+          teams: deptTeams.length || dept.teamCount || 0,
+          projects: deptProjects.length || projectCount,
         }}
       />
 
@@ -182,19 +245,19 @@ const DepartmentDetail = () => {
                 <DepartmentStatCard
                   icon={Users2}
                   label="Total members"
-                  value={dept.memberIds.length}
+                  value={memberCount}
                   tone="from-[#EFF6FF] to-[#BFDBFE] text-primary ring-primary/10"
                 />
                 <DepartmentStatCard
                   icon={FolderKanban}
                   label="Active projects"
-                  value={dept.projectCount}
+                  value={dept.activeProjectsCount ?? projectCount}
                   tone="from-[#ECFDF5] to-[#A7F3D0] text-emerald-600 ring-emerald-500/10"
                 />
                 <DepartmentStatCard
                   icon={Clock}
                   label="Avg tenure"
-                  value={`${dept.avgTenureMonths} mo`}
+                  value={`${dept.avgTenureMonths ?? 0} mo`}
                   tone="from-[#FFFBEB] to-[#FDE68A] text-amber-700 ring-amber-500/10"
                 />
               </div>
@@ -205,7 +268,7 @@ const DepartmentDetail = () => {
                     About this department
                   </h2>
                   <p className="text-[13px] text-secondaryText leading-relaxed">
-                    {dept.description}
+                    {dept.description || 'No description yet.'}
                   </p>
                   <div className="mt-4 flex items-center gap-2 text-[12px] text-secondaryText">
                     <CalendarDays size={13} className="text-slate-400" />
@@ -242,7 +305,13 @@ const DepartmentDetail = () => {
           )}
 
           {tab === 'members' && (
-            members.length === 0 ? (
+            membersLoading ? (
+              <div className="space-y-3">
+                <Skeleton className="h-12 w-full" />
+                <Skeleton className="h-12 w-full" />
+                <Skeleton className="h-12 w-full" />
+              </div>
+            ) : members.length === 0 ? (
               <div className="rounded-[20px] border border-border/45 bg-white/85 py-6">
                 <EmptyState
                   icon={Users2}
@@ -261,7 +330,13 @@ const DepartmentDetail = () => {
           )}
 
           {tab === 'teams' && (
-            deptTeams.length === 0 ? (
+            teamsLoading ? (
+              <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3.5 sm:gap-4">
+                {Array.from({ length: 3 }).map((_, i) => (
+                  <Skeleton key={i} className="h-[180px] w-full" rounded="rounded-[20px]" />
+                ))}
+              </div>
+            ) : deptTeams.length === 0 ? (
               <div className="rounded-[20px] border border-dashed border-border/70 bg-white/60 py-4">
                 <EmptyState
                   icon={UsersRound}
@@ -289,7 +364,13 @@ const DepartmentDetail = () => {
           )}
 
           {tab === 'projects' && (
-            deptProjects.length === 0 ? (
+            projectsLoading ? (
+              <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3.5 sm:gap-4">
+                {Array.from({ length: 3 }).map((_, i) => (
+                  <Skeleton key={i} className="h-[200px] w-full" rounded="rounded-[20px]" />
+                ))}
+              </div>
+            ) : deptProjects.length === 0 ? (
               <div className="rounded-[20px] border border-dashed border-border/70 bg-white/60 py-4">
                 <EmptyState
                   icon={FolderKanban}
@@ -307,12 +388,63 @@ const DepartmentDetail = () => {
           )}
 
           {tab === 'settings' && (
-            <div className="rounded-[20px] border border-dashed border-border/70 bg-white/60 py-4">
-              <EmptyState
-                icon={Settings}
-                title="Department settings"
-                description="Naming, ownership, and visibility controls will live here."
-              />
+            <div className="rounded-[20px] border border-border/45 bg-white/90 p-5 sm:p-6 shadow-sm space-y-5 max-w-xl">
+              <div>
+                <h2 className="text-[15px] font-semibold text-heading flex items-center gap-2">
+                  <Settings size={15} className="text-primary" />
+                  Edit department
+                </h2>
+                <p className="mt-1 text-[12.5px] text-secondaryText">
+                  Update name, description, and status.
+                </p>
+              </div>
+
+              {actionError ? (
+                <div role="alert" className="rounded-xl border border-error/20 bg-red-50 px-3.5 py-2.5 text-sm text-error">
+                  {actionError}
+                </div>
+              ) : null}
+
+              <div className="space-y-3.5">
+                <div>
+                  <label className="block text-sm font-medium text-heading mb-1.5">Name</label>
+                  <input
+                    value={editName}
+                    onChange={(e) => setEditName(e.target.value)}
+                    className="block w-full rounded-xl border border-border bg-white px-3 py-2.5 text-sm text-heading focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-heading mb-1.5">Description</label>
+                  <textarea
+                    value={editDescription}
+                    onChange={(e) => setEditDescription(e.target.value)}
+                    rows={3}
+                    className="block w-full rounded-xl border border-border bg-white px-3 py-2.5 text-sm text-heading focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary resize-none"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-heading mb-1.5">Status</label>
+                  <select
+                    value={editStatus}
+                    onChange={(e) => setEditStatus(e.target.value)}
+                    className="block w-full rounded-xl border border-border bg-white px-3 py-2.5 text-sm text-heading focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
+                  >
+                    <option value="active">Active</option>
+                    <option value="inactive">Inactive</option>
+                  </select>
+                </div>
+              </div>
+
+              <Button
+                type="button"
+                variant="primary"
+                isLoading={updateDepartment.isPending}
+                onClick={saveEdits}
+                className="rounded-xl"
+              >
+                Save changes
+              </Button>
             </div>
           )}
         </motion.div>

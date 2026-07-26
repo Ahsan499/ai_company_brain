@@ -4,11 +4,16 @@ import { ChevronRight, FolderKanban, Layers, Users2 } from 'lucide-react';
 import TeamLeadBadge from './TeamLeadBadge';
 import { getProjectById } from '../projects/projectData';
 
-const activeCount = (team) =>
-  team.projectIds.filter((id) => {
+const projectDisplayCount = (team) => {
+  if (typeof team.projectCount === 'number') return team.projectCount;
+  if (!Array.isArray(team.projectIds)) return 0;
+  return team.projectIds.filter((id) => {
     const p = getProjectById(id);
     return p && p.status === 'active';
   }).length;
+};
+
+const memberDisplayCount = (team) => team.memberCount ?? team.memberIds?.length ?? 0;
 
 const TeamTable = ({ teams = [] }) => {
   return (
@@ -37,7 +42,7 @@ const TeamTable = ({ teams = [] }) => {
               <div className="min-w-0 flex-1">
                 <p className="text-[13.5px] font-semibold text-heading truncate">{team.name}</p>
                 <p className="mt-0.5 text-[11.5px] text-secondaryText truncate">
-                  {team.departmentName} · {team.memberIds.length} members
+                  {team.departmentName} · {memberDisplayCount(team)} members
                 </p>
               </div>
               <ChevronRight size={16} className="shrink-0 text-slate-300" />
@@ -133,13 +138,13 @@ const TeamTable = ({ teams = [] }) => {
                   <td className="px-4 py-3.5">
                     <span className="inline-flex items-center gap-1.5 text-[13px] font-medium text-heading tabular-nums">
                       <Users2 size={13} className="text-slate-400" />
-                      {team.memberIds.length}
+                      {memberDisplayCount(team)}
                     </span>
                   </td>
                   <td className="px-4 py-3.5">
                     <span className="inline-flex items-center gap-1.5 text-[13px] font-medium text-heading tabular-nums">
                       <FolderKanban size={13} className="text-slate-400" />
-                      {activeCount(team)}
+                      {projectDisplayCount(team)}
                     </span>
                   </td>
                   <td className="px-4 py-3.5 text-right">

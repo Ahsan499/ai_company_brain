@@ -3,6 +3,8 @@ import { AnimatePresence, motion } from 'framer-motion';
 import { Building2, X } from 'lucide-react';
 import Button from '../ui/Button';
 import Input from '../ui/Input';
+import { useCreateOrganization } from '../../hooks/useOrganizations';
+import { getApiErrorMessage, getApiFieldErrors } from '../../lib/api';
 
 const INITIAL = {
   name: '',
@@ -13,16 +15,19 @@ const INITIAL = {
   website: '',
 };
 
-const CreateOrganizationForm = ({ onClose }) => {
+const CreateOrganizationForm = ({ onClose, onCreated }) => {
   const titleId = useId();
   const firstRef = useRef(null);
   const [form, setForm] = useState(INITIAL);
+  const [fieldErrors, setFieldErrors] = useState({});
+  const [formError, setFormError] = useState('');
+  const createOrganization = useCreateOrganization();
 
   useEffect(() => {
     const t = window.setTimeout(() => firstRef.current?.focus(), 50);
     document.body.style.overflow = 'hidden';
     const onKey = (e) => {
-      if (e.key === 'Escape') onClose?.();
+      if (e.key === 'Escape' && !createOrganization.isPending) onClose?.();
     };
     document.addEventListener('keydown', onKey);
     return () => {
@@ -30,13 +35,37 @@ const CreateOrganizationForm = ({ onClose }) => {
       document.body.style.overflow = '';
       document.removeEventListener('keydown', onKey);
     };
-  }, [onClose]);
+  }, [onClose, createOrganization.isPending]);
 
-  const set = (key) => (e) => setForm((prev) => ({ ...prev, [key]: e.target.value }));
+  const set = (key) => (e) => {
+    setForm((prev) => ({ ...prev, [key]: e.target.value }));
+    setFieldErrors((prev) => {
+      if (!prev[key]) return prev;
+      const next = { ...prev };
+      delete next[key];
+      return next;
+    });
+  };
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
-    onClose?.();
+    setFormError('');
+    setFieldErrors({});
+    try {
+      const org = await createOrganization.mutateAsync({
+        name: form.name,
+        industry: form.industry || null,
+        size: form.size,
+        plan: form.plan,
+        ownerEmail: form.ownerEmail || null,
+        website: form.website || null,
+      });
+      onCreated?.(org);
+      onClose?.();
+    } catch (error) {
+      setFieldErrors(getApiFieldErrors(error));
+      setFormError(getApiErrorMessage(error, 'Could not create organization.'));
+    }
   };
 
   return (
@@ -78,6 +107,7 @@ const CreateOrganizationForm = ({ onClose }) => {
         <button
           type="button"
           onClick={onClose}
+          disabled={createOrganization.isPending}
           className="h-9 w-9 inline-flex items-center justify-center rounded-xl text-secondaryText hover:bg-slate-100 hover:text-heading transition-colors"
           aria-label="Close"
         >
@@ -86,6 +116,12 @@ const CreateOrganizationForm = ({ onClose }) => {
       </div>
 
       <form onSubmit={handleSubmit} className="space-y-4">
+        {formError ? (
+          <div role="alert" className="rounded-xl border border-error/20 bg-red-50 px-3.5 py-2.5 text-sm text-error">
+            {formError}
+          </div>
+        ) : null}
+
         <Input
           ref={firstRef}
           label="Organization name"
@@ -93,6 +129,7 @@ const CreateOrganizationForm = ({ onClose }) => {
           value={form.name}
           onChange={set('name')}
           required
+          error={fieldErrors.name}
           className="rounded-xl"
         />
         <Input
@@ -100,6 +137,7 @@ const CreateOrganizationForm = ({ onClose }) => {
           placeholder="e.g. Software & SaaS"
           value={form.industry}
           onChange={set('industry')}
+          error={fieldErrors.industry}
           className="rounded-xl"
         />
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
@@ -129,6 +167,9 @@ const CreateOrganizationForm = ({ onClose }) => {
               <option value="scale">Scale</option>
               <option value="enterprise">Enterprise</option>
             </select>
+            {fieldErrors.plan ? (
+              <p className="mt-1.5 text-sm text-error">{fieldErrors.plan}</p>
+            ) : null}
           </div>
         </div>
         <Input
@@ -137,6 +178,7 @@ const CreateOrganizationForm = ({ onClose }) => {
           placeholder="owner@company.com"
           value={form.ownerEmail}
           onChange={set('ownerEmail')}
+          error={fieldErrors.ownerEmail || fieldErrors.owner_email}
           className="rounded-xl"
         />
         <Input
@@ -144,16 +186,24 @@ const CreateOrganizationForm = ({ onClose }) => {
           placeholder="company.com"
           value={form.website}
           onChange={set('website')}
+          error={fieldErrors.website}
           className="rounded-xl"
         />
 
         <div className="flex flex-col-reverse sm:flex-row sm:justify-end gap-2.5 pt-2">
-          <Button type="button" variant="secondary" onClick={onClose} className="rounded-xl">
+          <Button
+            type="button"
+            variant="secondary"
+            onClick={onClose}
+            disabled={createOrganization.isPending}
+            className="rounded-xl"
+          >
             Cancel
           </Button>
           <Button
             type="submit"
             variant="primary"
+            isLoading={createOrganization.isPending}
             className="rounded-xl shadow-[0_6px_16px_rgba(37,99,235,0.25)]"
           >
             Create Organization
@@ -164,29 +214,23 @@ const CreateOrganizationForm = ({ onClose }) => {
   );
 };
 
-/**
- * Create Organization modal — UI only, no API submit.
- * Form remounts on each open so state resets without effect setState.
- */
-const CreateOrganizationModal = ({ open, onClose }) => {
-  return (
-    <AnimatePresence>
-      {open && (
-        <div className="fixed inset-0 z-[85] flex items-end sm:items-center justify-center p-0 sm:p-6">
-          <motion.button
-            type="button"
-            aria-label="Close dialog"
-            className="absolute inset-0 bg-heading/25 backdrop-blur-[6px]"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            onClick={onClose}
-          />
-          <CreateOrganizationForm onClose={onClose} />
-        </div>
-      )}
-    </AnimatePresence>
-  );
-};
+const CreateOrganizationModal = ({ open, onClose, onCreated }) => (
+  <AnimatePresence>
+    {open && (
+      <div className="fixed inset-0 z-[85] flex items-end sm:items-center justify-center p-0 sm:p-6">
+        <motion.button
+          type="button"
+          aria-label="Close dialog"
+          className="absolute inset-0 bg-heading/25 backdrop-blur-[6px]"
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          onClick={onClose}
+        />
+        <CreateOrganizationForm onClose={onClose} onCreated={onCreated} />
+      </div>
+    )}
+  </AnimatePresence>
+);
 
 export default CreateOrganizationModal;

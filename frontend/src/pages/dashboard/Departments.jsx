@@ -1,42 +1,83 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
-import { Network, Plus, Search, LayoutGrid, List, Filter } from 'lucide-react';
+import { Network, Plus, Search, LayoutGrid, List, Filter, CheckCircle2 } from 'lucide-react';
 import Button from '../../components/ui/Button';
+import Skeleton from '../../components/ui/Skeleton';
+import ErrorState from '../../components/ui/ErrorState';
 import EmptyState from '../../components/dashboard/EmptyState';
 import DepartmentCard from '../../components/departments/DepartmentCard';
 import DepartmentTable from '../../components/departments/DepartmentTable';
 import CreateDepartmentModal from '../../components/departments/CreateDepartmentModal';
-import {
-  DEPARTMENTS,
-  filterDepartments,
-  DEPARTMENT_MANAGER_OPTIONS,
-} from '../../components/departments/departmentData';
-import { ORGANIZATIONS } from '../../components/organizations/organizationData';
+import { useDepartments } from '../../hooks/useDepartments';
+import { useOrganizations } from '../../hooks/useOrganizations';
+import { useUsers } from '../../hooks/useUsers';
 
 const PAGE_SIZE = 6;
 const selectClass =
   'h-10 rounded-xl border border-border/60 bg-white px-3 text-[12.5px] font-medium text-heading focus:outline-none focus:border-primary/40 focus:ring-[3px] focus:ring-primary/12';
 
+const DepartmentsSkeleton = ({ view }) => {
+  if (view === 'table') {
+    return (
+      <div className="rounded-[20px] border border-border/45 bg-white/90 p-4 space-y-3">
+        {Array.from({ length: 5 }).map((_, i) => (
+          <Skeleton key={i} className="h-12 w-full" />
+        ))}
+      </div>
+    );
+  }
+
+  return (
+    <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3.5 sm:gap-4">
+      {Array.from({ length: 6 }).map((_, i) => (
+        <Skeleton key={i} className="h-[200px] w-full" rounded="rounded-[20px]" />
+      ))}
+    </div>
+  );
+};
+
 const Departments = () => {
   const [query, setQuery] = useState('');
+  const [debouncedQuery, setDebouncedQuery] = useState('');
   const [organizationId, setOrganizationId] = useState('all');
   const [managerId, setManagerId] = useState('all');
   const [view, setView] = useState('grid');
   const [page, setPage] = useState(1);
   const [createOpen, setCreateOpen] = useState(false);
+  const [successMsg, setSuccessMsg] = useState('');
 
-  const filtered = useMemo(
-    () => filterDepartments(DEPARTMENTS, { query, organizationId, managerId }),
-    [query, organizationId, managerId]
-  );
+  useEffect(() => {
+    const t = window.setTimeout(() => setDebouncedQuery(query.trim()), 300);
+    return () => window.clearTimeout(t);
+  }, [query]);
 
-  const pageItems = filtered.slice(0, page * PAGE_SIZE);
-  const hasMore = pageItems.length < filtered.length;
+  const { data, isLoading, isFetching, isError, error, refetch } = useDepartments({
+    search: debouncedQuery,
+    organizationId,
+    managerId,
+    page,
+    perPage: PAGE_SIZE,
+  });
+
+  const { data: orgsData } = useOrganizations({ perPage: 100, page: 1 });
+  const { data: usersData } = useUsers({ perPage: 100, page: 1 });
+
+  const departments = data?.data ?? [];
+  const meta = data?.meta ?? { currentPage: 1, lastPage: 1, total: 0 };
+  const organizations = orgsData?.data ?? [];
+  const managers = usersData?.data ?? [];
+  const showEmpty = !isLoading && !isError && departments.length === 0;
 
   const resetFilters = () => {
     setQuery('');
+    setDebouncedQuery('');
     setOrganizationId('all');
     setManagerId('all');
+    setPage(1);
+  };
+
+  const onFilterChange = (setter) => (e) => {
+    setter(e.target.value);
     setPage(1);
   };
 
@@ -54,7 +95,7 @@ const Departments = () => {
               <Network size={17} strokeWidth={2} />
             </span>
             <span className="rounded-full bg-primary/10 px-2.5 py-0.5 text-[11px] font-semibold text-primary ring-1 ring-primary/12">
-              {DEPARTMENTS.length} departments
+              {meta.total ?? '—'} departments
             </span>
           </div>
           <h1 className="text-[26px] sm:text-[30px] font-bold text-heading tracking-tight leading-tight">
@@ -75,6 +116,16 @@ const Departments = () => {
           New Department
         </Button>
       </motion.section>
+
+      {successMsg ? (
+        <div
+          role="status"
+          className="flex items-center gap-2 rounded-xl border border-emerald-500/20 bg-emerald-50 px-3.5 py-2.5 text-[13px] font-medium text-emerald-800"
+        >
+          <CheckCircle2 size={16} className="text-emerald-600 shrink-0" />
+          {successMsg}
+        </div>
+      ) : null}
 
       <motion.div
         initial={{ opacity: 0, y: 10 }}
@@ -115,15 +166,12 @@ const Departments = () => {
           </span>
           <select
             value={organizationId}
-            onChange={(e) => {
-              setOrganizationId(e.target.value);
-              setPage(1);
-            }}
+            onChange={onFilterChange(setOrganizationId)}
             className={`${selectClass} max-w-[200px]`}
             aria-label="Filter by organization"
           >
             <option value="all">All organizations</option>
-            {ORGANIZATIONS.map((o) => (
+            {organizations.map((o) => (
               <option key={o.id} value={o.id}>
                 {o.name}
               </option>
@@ -131,15 +179,12 @@ const Departments = () => {
           </select>
           <select
             value={managerId}
-            onChange={(e) => {
-              setManagerId(e.target.value);
-              setPage(1);
-            }}
+            onChange={onFilterChange(setManagerId)}
             className={`${selectClass} max-w-[180px]`}
             aria-label="Filter by manager"
           >
             <option value="all">All managers</option>
-            {DEPARTMENT_MANAGER_OPTIONS.map((m) => (
+            {managers.map((m) => (
               <option key={m.id} value={m.id}>
                 {m.name}
               </option>
@@ -177,7 +222,15 @@ const Departments = () => {
         </div>
       </motion.div>
 
-      {filtered.length === 0 ? (
+      {isError ? (
+        <ErrorState
+          title="Couldn’t load departments"
+          message={error?.response?.data?.message || error?.message || 'Please try again.'}
+          onRetry={() => refetch()}
+        />
+      ) : isLoading ? (
+        <DepartmentsSkeleton view={view} />
+      ) : showEmpty ? (
         <div className="rounded-[20px] border border-border/45 bg-white/85 py-6 shadow-sm">
           <EmptyState
             icon={Network}
@@ -191,38 +244,64 @@ const Departments = () => {
           />
         </div>
       ) : view === 'grid' ? (
-        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3.5 sm:gap-4">
-          {pageItems.map((dept, i) => (
+        <div
+          className={`grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3.5 sm:gap-4 ${
+            isFetching ? 'opacity-80' : ''
+          }`}
+        >
+          {departments.map((dept, i) => (
             <DepartmentCard key={dept.id} dept={dept} index={i} />
           ))}
         </div>
       ) : (
-        <DepartmentTable departments={pageItems} />
-      )}
-
-      {filtered.length > 0 && (
-        <div className="flex flex-col sm:flex-row items-center justify-between gap-3">
-          <p className="text-[12.5px] text-secondaryText">
-            Showing{' '}
-            <span className="font-semibold text-heading tabular-nums">{pageItems.length}</span>
-            {' '}of{' '}
-            <span className="font-semibold text-heading tabular-nums">{filtered.length}</span>
-            {' '}departments
-          </p>
-          {hasMore && (
-            <Button
-              type="button"
-              variant="secondary"
-              onClick={() => setPage((p) => p + 1)}
-              className="rounded-xl h-10 text-[13px] font-semibold bg-white/90"
-            >
-              Load more
-            </Button>
-          )}
+        <div className={isFetching ? 'opacity-80' : ''}>
+          <DepartmentTable departments={departments} />
         </div>
       )}
 
-      <CreateDepartmentModal open={createOpen} onClose={() => setCreateOpen(false)} />
+      {!isLoading && !isError && departments.length > 0 && (
+        <div className="flex flex-col sm:flex-row items-center justify-between gap-3">
+          <p className="text-[12.5px] text-secondaryText">
+            Page{' '}
+            <span className="font-semibold text-heading tabular-nums">{meta.currentPage}</span>
+            {' '}of{' '}
+            <span className="font-semibold text-heading tabular-nums">{meta.lastPage}</span>
+            {' · '}
+            <span className="font-semibold text-heading tabular-nums">{meta.total}</span>
+            {' '}departments
+          </p>
+          <div className="flex items-center gap-2">
+            <Button
+              type="button"
+              variant="secondary"
+              disabled={meta.currentPage <= 1}
+              onClick={() => setPage((p) => Math.max(1, p - 1))}
+              className="h-10 rounded-xl text-[13px] font-semibold bg-white/90 disabled:opacity-40"
+            >
+              Previous
+            </Button>
+            <Button
+              type="button"
+              variant="secondary"
+              disabled={meta.currentPage >= meta.lastPage}
+              onClick={() => setPage((p) => p + 1)}
+              className="h-10 rounded-xl text-[13px] font-semibold bg-white/90 disabled:opacity-40"
+            >
+              Next
+            </Button>
+          </div>
+        </div>
+      )}
+
+      <CreateDepartmentModal
+        open={createOpen}
+        onClose={() => setCreateOpen(false)}
+        onCreated={(dept) => {
+          setSuccessMsg(`“${dept?.name || 'Department'}” created successfully.`);
+          setPage(1);
+          window.setTimeout(() => setSuccessMsg(''), 4000);
+        }}
+      />
     </div>
   );
 };

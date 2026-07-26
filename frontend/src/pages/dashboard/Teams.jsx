@@ -1,42 +1,80 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
-import { Filter, LayoutGrid, List, Plus, Search, UsersRound } from 'lucide-react';
+import { Filter, LayoutGrid, List, Plus, Search, UsersRound, CheckCircle2 } from 'lucide-react';
 import Button from '../../components/ui/Button';
+import Skeleton from '../../components/ui/Skeleton';
+import ErrorState from '../../components/ui/ErrorState';
 import EmptyState from '../../components/dashboard/EmptyState';
 import TeamCard from '../../components/teams/TeamCard';
 import TeamTable from '../../components/teams/TeamTable';
 import CreateTeamModal from '../../components/teams/CreateTeamModal';
-import { TEAMS, filterTeams } from '../../components/teams/teamData';
-import { ORGANIZATIONS } from '../../components/organizations/organizationData';
-import { DEPARTMENTS } from '../../components/departments/departmentData';
+import { useTeams } from '../../hooks/useTeams';
+import { useOrganizations } from '../../hooks/useOrganizations';
+import { useDepartments } from '../../hooks/useDepartments';
 
 const PAGE_SIZE = 6;
 const selectClass =
   'h-10 rounded-xl border border-border/60 bg-white px-3 text-[12.5px] font-medium text-heading focus:outline-none focus:border-primary/40 focus:ring-[3px] focus:ring-primary/12';
 
+const TeamsSkeleton = ({ view }) => {
+  if (view === 'table') {
+    return (
+      <div className="rounded-[20px] border border-border/45 bg-white/90 p-4 space-y-3">
+        {Array.from({ length: 5 }).map((_, i) => (
+          <Skeleton key={i} className="h-12 w-full" />
+        ))}
+      </div>
+    );
+  }
+
+  return (
+    <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3.5 sm:gap-4">
+      {Array.from({ length: 6 }).map((_, i) => (
+        <Skeleton key={i} className="h-[200px] w-full" rounded="rounded-[20px]" />
+      ))}
+    </div>
+  );
+};
+
 const Teams = () => {
   const [query, setQuery] = useState('');
+  const [debouncedQuery, setDebouncedQuery] = useState('');
   const [organizationId, setOrganizationId] = useState('all');
   const [departmentId, setDepartmentId] = useState('all');
   const [view, setView] = useState('grid');
   const [page, setPage] = useState(1);
   const [createOpen, setCreateOpen] = useState(false);
+  const [successMsg, setSuccessMsg] = useState('');
 
-  const departmentOptions = useMemo(() => {
-    if (organizationId === 'all') return DEPARTMENTS;
-    return DEPARTMENTS.filter((d) => d.organizationId === organizationId);
-  }, [organizationId]);
+  useEffect(() => {
+    const t = window.setTimeout(() => setDebouncedQuery(query.trim()), 300);
+    return () => window.clearTimeout(t);
+  }, [query]);
 
-  const filtered = useMemo(
-    () => filterTeams(TEAMS, { query, organizationId, departmentId }),
-    [query, organizationId, departmentId]
-  );
+  const { data, isLoading, isFetching, isError, error, refetch } = useTeams({
+    search: debouncedQuery,
+    organizationId,
+    departmentId,
+    page,
+    perPage: PAGE_SIZE,
+  });
 
-  const pageItems = filtered.slice(0, page * PAGE_SIZE);
-  const hasMore = pageItems.length < filtered.length;
+  const { data: orgsData } = useOrganizations({ perPage: 100, page: 1 });
+  const { data: deptsData } = useDepartments({
+    organizationId,
+    perPage: 100,
+    page: 1,
+  });
+
+  const teams = data?.data ?? [];
+  const meta = data?.meta ?? { currentPage: 1, lastPage: 1, total: 0 };
+  const organizations = orgsData?.data ?? [];
+  const departmentOptions = deptsData?.data ?? [];
+  const showEmpty = !isLoading && !isError && teams.length === 0;
 
   const resetFilters = () => {
     setQuery('');
+    setDebouncedQuery('');
     setOrganizationId('all');
     setDepartmentId('all');
     setPage(1);
@@ -56,7 +94,7 @@ const Teams = () => {
               <UsersRound size={17} strokeWidth={2} />
             </span>
             <span className="rounded-full bg-primary/10 px-2.5 py-0.5 text-[11px] font-semibold text-primary ring-1 ring-primary/12">
-              {TEAMS.length} teams
+              {meta.total ?? '—'} teams
             </span>
           </div>
           <h1 className="text-[26px] sm:text-[30px] font-bold text-heading tracking-tight leading-tight">
@@ -77,6 +115,16 @@ const Teams = () => {
           New Team
         </Button>
       </motion.section>
+
+      {successMsg ? (
+        <div
+          role="status"
+          className="flex items-center gap-2 rounded-xl border border-emerald-500/20 bg-emerald-50 px-3.5 py-2.5 text-[13px] font-medium text-emerald-800"
+        >
+          <CheckCircle2 size={16} className="text-emerald-600 shrink-0" />
+          {successMsg}
+        </div>
+      ) : null}
 
       <motion.div
         initial={{ opacity: 0, y: 10 }}
@@ -126,7 +174,7 @@ const Teams = () => {
             aria-label="Filter by organization"
           >
             <option value="all">All organizations</option>
-            {ORGANIZATIONS.map((o) => (
+            {organizations.map((o) => (
               <option key={o.id} value={o.id}>
                 {o.name}
               </option>
@@ -180,7 +228,15 @@ const Teams = () => {
         </div>
       </motion.div>
 
-      {filtered.length === 0 ? (
+      {isError ? (
+        <ErrorState
+          title="Couldn’t load teams"
+          message={error?.response?.data?.message || error?.message || 'Please try again.'}
+          onRetry={() => refetch()}
+        />
+      ) : isLoading ? (
+        <TeamsSkeleton view={view} />
+      ) : showEmpty ? (
         <div className="rounded-[20px] border border-border/45 bg-white/85 py-6 shadow-sm">
           <EmptyState
             icon={UsersRound}
@@ -194,38 +250,64 @@ const Teams = () => {
           />
         </div>
       ) : view === 'grid' ? (
-        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3.5 sm:gap-4">
-          {pageItems.map((team, i) => (
+        <div
+          className={`grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3.5 sm:gap-4 ${
+            isFetching ? 'opacity-80' : ''
+          }`}
+        >
+          {teams.map((team, i) => (
             <TeamCard key={team.id} team={team} index={i} />
           ))}
         </div>
       ) : (
-        <TeamTable teams={pageItems} />
-      )}
-
-      {filtered.length > 0 && (
-        <div className="flex flex-col sm:flex-row items-center justify-between gap-3">
-          <p className="text-[12.5px] text-secondaryText">
-            Showing{' '}
-            <span className="font-semibold text-heading tabular-nums">{pageItems.length}</span>
-            {' '}of{' '}
-            <span className="font-semibold text-heading tabular-nums">{filtered.length}</span>
-            {' '}teams
-          </p>
-          {hasMore && (
-            <Button
-              type="button"
-              variant="secondary"
-              onClick={() => setPage((p) => p + 1)}
-              className="rounded-xl h-10 text-[13px] font-semibold bg-white/90"
-            >
-              Load more
-            </Button>
-          )}
+        <div className={isFetching ? 'opacity-80' : ''}>
+          <TeamTable teams={teams} />
         </div>
       )}
 
-      <CreateTeamModal open={createOpen} onClose={() => setCreateOpen(false)} />
+      {!isLoading && !isError && teams.length > 0 && (
+        <div className="flex flex-col sm:flex-row items-center justify-between gap-3">
+          <p className="text-[12.5px] text-secondaryText">
+            Page{' '}
+            <span className="font-semibold text-heading tabular-nums">{meta.currentPage}</span>
+            {' '}of{' '}
+            <span className="font-semibold text-heading tabular-nums">{meta.lastPage}</span>
+            {' · '}
+            <span className="font-semibold text-heading tabular-nums">{meta.total}</span>
+            {' '}teams
+          </p>
+          <div className="flex items-center gap-2">
+            <Button
+              type="button"
+              variant="secondary"
+              disabled={meta.currentPage <= 1}
+              onClick={() => setPage((p) => Math.max(1, p - 1))}
+              className="h-10 rounded-xl text-[13px] font-semibold bg-white/90 disabled:opacity-40"
+            >
+              Previous
+            </Button>
+            <Button
+              type="button"
+              variant="secondary"
+              disabled={meta.currentPage >= meta.lastPage}
+              onClick={() => setPage((p) => p + 1)}
+              className="h-10 rounded-xl text-[13px] font-semibold bg-white/90 disabled:opacity-40"
+            >
+              Next
+            </Button>
+          </div>
+        </div>
+      )}
+
+      <CreateTeamModal
+        open={createOpen}
+        onClose={() => setCreateOpen(false)}
+        onCreated={(team) => {
+          setSuccessMsg(`“${team?.name || 'Team'}” created successfully.`);
+          setPage(1);
+          window.setTimeout(() => setSuccessMsg(''), 4000);
+        }}
+      />
     </div>
   );
 };

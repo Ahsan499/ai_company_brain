@@ -31,7 +31,7 @@ const DepartmentTable = ({ departments = [] }) => {
               <div className="min-w-0 flex-1">
                 <p className="text-[13.5px] font-semibold text-heading truncate">{dept.name}</p>
                 <p className="mt-0.5 text-[11.5px] text-secondaryText truncate">
-                  {dept.organizationName} · {dept.memberIds.length} members
+                  {dept.organizationName} · {dept.memberCount ?? dept.memberIds?.length ?? 0} members
                 </p>
                 <div className="mt-1.5">
                   <StatusBadge status={dept.status === 'active' ? 'active' : 'suspended'} />
@@ -104,7 +104,7 @@ const DepartmentTable = ({ departments = [] }) => {
                   <td className="px-4 py-3.5">
                     <span className="inline-flex items-center gap-1.5 text-[13px] font-medium text-heading tabular-nums">
                       <Users2 size={13} className="text-slate-400" />
-                      {dept.memberIds.length}
+                      {dept.memberCount ?? dept.memberIds?.length ?? 0}
                     </span>
                   </td>
                   <td className="px-4 py-3.5">

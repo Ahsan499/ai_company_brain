@@ -13,19 +13,27 @@ import {
   Mail,
   CalendarDays,
   Activity,
+  Trash2,
 } from 'lucide-react';
 import Button from '../../components/ui/Button';
+import Skeleton from '../../components/ui/Skeleton';
+import ErrorState from '../../components/ui/ErrorState';
 import EmptyState from '../../components/dashboard/EmptyState';
 import OrganizationTabs from '../../components/organizations/OrganizationTabs';
 import MemberRow from '../../components/organizations/MemberRow';
 import DepartmentCard from '../../components/departments/DepartmentCard';
 import {
-  getOrganizationById,
   ORGANIZATION_PLANS,
   formatOrgDate,
 } from '../../components/organizations/organizationData';
 import { getDepartmentsByOrganization } from '../../components/departments/departmentData';
 import { getProjectsByOrganization } from '../../components/projects/projectData';
+import {
+  useDeleteOrganization,
+  useOrganization,
+  useUpdateOrganization,
+} from '../../hooks/useOrganizations';
+import { getApiErrorMessage } from '../../lib/api';
 
 const StatMini = ({ icon: Icon, label, value, tone }) => (
   <div
@@ -55,8 +63,15 @@ const PlaceholderPanel = ({ title, description }) => (
 const OrganizationDetail = () => {
   const { id } = useParams();
   const navigate = useNavigate();
-  const org = useMemo(() => getOrganizationById(id), [id]);
+  const { data: org, isLoading, isError, error, refetch } = useOrganization(id);
+  const updateOrganization = useUpdateOrganization();
+  const deleteOrganization = useDeleteOrganization();
   const [tab, setTab] = useState('overview');
+  const [actionError, setActionError] = useState('');
+  const [editName, setEditName] = useState('');
+  const [editStatus, setEditStatus] = useState('active');
+
+  // Other-module tabs stay on dummy catalogs until those modules are wired.
   const orgDepartments = useMemo(
     () => (org ? getDepartmentsByOrganization(org.id) : []),
     [org]
@@ -65,10 +80,70 @@ const OrganizationDetail = () => {
     () => (org ? getProjectsByOrganization(org.id) : []),
     [org]
   );
-  const activeOrgProjects = useMemo(
-    () => orgProjects.filter((p) => p.status === 'active').length,
-    [orgProjects]
-  );
+
+  const activeProjects =
+    org?.activeProjectsCount ??
+    orgProjects.filter((p) => p.status === 'active').length;
+
+  const openEdit = () => {
+    if (!org) return;
+    setEditName(org.name || '');
+    setEditStatus(org.status || 'active');
+    setTab('settings');
+    setActionError('');
+  };
+
+  const saveEdits = async () => {
+    if (!org) return;
+    setActionError('');
+    try {
+      await updateOrganization.mutateAsync({
+        id: org.id,
+        name: editName.trim() || org.name,
+        status: editStatus,
+      });
+    } catch (err) {
+      setActionError(getApiErrorMessage(err, 'Could not update organization.'));
+    }
+  };
+
+  const handleDelete = async () => {
+    if (!org) return;
+    if (!window.confirm(`Delete “${org.name}”? This cannot be undone.`)) return;
+    setActionError('');
+    try {
+      await deleteOrganization.mutateAsync(org.id);
+      navigate('/dashboard/organizations', { replace: true });
+    } catch (err) {
+      setActionError(getApiErrorMessage(err, 'Could not delete organization.'));
+    }
+  };
+
+  if (isLoading) {
+    return (
+      <div className="mx-auto max-w-[1600px] space-y-5">
+        <Skeleton className="h-4 w-28" />
+        <Skeleton className="h-40 w-full" rounded="rounded-[24px]" />
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          <Skeleton className="h-24" rounded="rounded-[18px]" />
+          <Skeleton className="h-24" rounded="rounded-[18px]" />
+          <Skeleton className="h-24" rounded="rounded-[18px]" />
+        </div>
+      </div>
+    );
+  }
+
+  if (isError) {
+    return (
+      <div className="mx-auto max-w-lg py-10">
+        <ErrorState
+          title="Couldn’t load organization"
+          message={error?.response?.data?.message || error?.message}
+          onRetry={() => refetch()}
+        />
+      </div>
+    );
+  }
 
   if (!org) {
     return (
@@ -127,7 +202,7 @@ const OrganizationDetail = () => {
               <div
                 className={`
                   flex h-14 w-14 sm:h-16 sm:w-16 shrink-0 items-center justify-center rounded-[18px]
-                  bg-gradient-to-br ${org.gradient} text-white text-[15px] sm:text-[17px] font-semibold
+                  bg-gradient-to-br ${org.gradient || 'from-[#3B82F6] to-[#1D4ED8]'} text-white text-[15px] sm:text-[17px] font-semibold
                   shadow-[0_10px_24px_rgba(37,99,235,0.28)] ring-[3px] ring-white
                 `}
               >
@@ -161,17 +236,21 @@ const OrganizationDetail = () => {
                   </span>
                 </div>
                 <p className="mt-1.5 text-[13px] text-secondaryText leading-relaxed max-w-2xl">
-                  {org.description}
+                  {org.description || 'No description yet.'}
                 </p>
                 <div className="mt-2.5 flex flex-wrap gap-x-4 gap-y-1 text-[12px] text-secondaryText">
-                  <span className="inline-flex items-center gap-1.5">
-                    <MapPin size={12} className="text-slate-400" />
-                    {org.location}
-                  </span>
-                  <span className="inline-flex items-center gap-1.5">
-                    <Globe size={12} className="text-slate-400" />
-                    {org.website}
-                  </span>
+                  {org.location ? (
+                    <span className="inline-flex items-center gap-1.5">
+                      <MapPin size={12} className="text-slate-400" />
+                      {org.location}
+                    </span>
+                  ) : null}
+                  {org.website ? (
+                    <span className="inline-flex items-center gap-1.5">
+                      <Globe size={12} className="text-slate-400" />
+                      {org.website}
+                    </span>
+                  ) : null}
                 </div>
               </div>
             </div>
@@ -190,6 +269,7 @@ const OrganizationDetail = () => {
                 type="button"
                 variant="primary"
                 className="h-10 rounded-xl text-[13px] font-semibold shadow-[0_6px_16px_rgba(37,99,235,0.25)]"
+                onClick={openEdit}
               >
                 Edit Organization
               </Button>
@@ -201,7 +281,10 @@ const OrganizationDetail = () => {
       <OrganizationTabs
         value={tab}
         onChange={setTab}
-        counts={{ members: org.members?.length || 0, departments: orgDepartments.length }}
+        counts={{
+          members: org.members?.length || org.memberCount || 0,
+          departments: org.departmentCount ?? orgDepartments.length,
+        }}
       />
 
       <AnimatePresence mode="wait">
@@ -218,19 +301,19 @@ const OrganizationDetail = () => {
                 <StatMini
                   icon={Users2}
                   label="Total members"
-                  value={org.memberCount.toLocaleString()}
+                  value={(org.memberCount ?? org.members?.length ?? 0).toLocaleString()}
                   tone="from-[#EFF6FF] to-[#BFDBFE] text-primary ring-primary/10"
                 />
                 <StatMini
                   icon={Network}
                   label="Departments"
-                  value={org.departmentCount}
+                  value={org.departmentCount ?? org.departmentsCount ?? 0}
                   tone="from-[#ECFDF5] to-[#A7F3D0] text-emerald-600 ring-emerald-500/10"
                 />
                 <StatMini
                   icon={FolderKanban}
                   label="Active projects"
-                  value={activeOrgProjects}
+                  value={activeProjects}
                   tone="from-[#FFFBEB] to-[#FDE68A] text-amber-700 ring-amber-500/10"
                 />
               </div>
@@ -247,10 +330,16 @@ const OrganizationDetail = () => {
                   </h2>
                   <dl className="space-y-3.5">
                     {[
-                      { icon: Building2, label: 'Industry', value: org.industry },
-                      { icon: Users2, label: 'Company size', value: org.size },
+                      { icon: Building2, label: 'Industry', value: org.industry || '—' },
+                      { icon: Users2, label: 'Company size', value: org.size || '—' },
                       { icon: CalendarDays, label: 'Created', value: formatOrgDate(org.createdAt) },
-                      { icon: Mail, label: 'Owner', value: `${org.owner} · ${org.ownerEmail}` },
+                      {
+                        icon: Mail,
+                        label: 'Owner',
+                        value: org.owner
+                          ? `${org.owner}${org.ownerEmail ? ` · ${org.ownerEmail}` : ''}`
+                          : org.ownerEmail || '—',
+                      },
                     ].map((row) => (
                       <div key={row.label} className="flex items-start gap-3">
                         <span className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-slate-50 text-slate-500 ring-1 ring-slate-200/70">
@@ -330,6 +419,9 @@ const OrganizationDetail = () => {
                 {(org.members || []).map((member) => (
                   <MemberRow key={member.id} member={member} />
                 ))}
+                {!org.members?.length && (
+                  <p className="text-[13px] text-secondaryText px-4 py-6">No members loaded.</p>
+                )}
               </div>
             </div>
           )}
@@ -338,7 +430,7 @@ const OrganizationDetail = () => {
             orgDepartments.length === 0 ? (
               <PlaceholderPanel
                 title="No departments yet"
-                description="Departments created for this organization will appear here."
+                description="Departments created for this organization will appear here. (Dummy catalog until Departments module is wired.)"
               />
             ) : (
               <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3.5 sm:gap-4">
@@ -350,10 +442,70 @@ const OrganizationDetail = () => {
           )}
 
           {tab === 'settings' && (
-            <PlaceholderPanel
-              title="Organization settings"
-              description="Billing, security, and workspace preferences will live here — UI placeholder only."
-            />
+            <div className="rounded-[20px] border border-border/45 bg-white/90 p-5 sm:p-6 shadow-sm space-y-5 max-w-xl">
+              <div>
+                <h2 className="text-[15px] font-semibold text-heading">Edit organization</h2>
+                <p className="mt-1 text-[12.5px] text-secondaryText">
+                  Update workspace name and status. Billing/security stay UI-only for now.
+                </p>
+              </div>
+
+              {actionError ? (
+                <div role="alert" className="rounded-xl border border-error/20 bg-red-50 px-3.5 py-2.5 text-sm text-error">
+                  {actionError}
+                </div>
+              ) : null}
+
+              <div className="space-y-3.5">
+                <div>
+                  <label className="block text-sm font-medium text-heading mb-1.5">Name</label>
+                  <input
+                    value={editName || org.name}
+                    onChange={(e) => setEditName(e.target.value)}
+                    onFocus={() => {
+                      if (!editName) setEditName(org.name || '');
+                    }}
+                    className="block w-full rounded-xl border border-border bg-white px-3 py-2.5 text-sm text-heading focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-heading mb-1.5">Status</label>
+                  <select
+                    value={editStatus || org.status}
+                    onChange={(e) => setEditStatus(e.target.value)}
+                    onFocus={() => {
+                      if (!editStatus) setEditStatus(org.status || 'active');
+                    }}
+                    className="block w-full rounded-xl border border-border bg-white px-3 py-2.5 text-sm text-heading focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
+                  >
+                    <option value="active">Active</option>
+                    <option value="inactive">Inactive</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="flex flex-wrap gap-2.5 pt-1">
+                <Button
+                  type="button"
+                  variant="primary"
+                  isLoading={updateOrganization.isPending}
+                  onClick={saveEdits}
+                  className="rounded-xl"
+                >
+                  Save changes
+                </Button>
+                <Button
+                  type="button"
+                  variant="secondary"
+                  isLoading={deleteOrganization.isPending}
+                  onClick={handleDelete}
+                  className="rounded-xl gap-2 text-error border-error/20 hover:bg-red-50"
+                >
+                  <Trash2 size={14} />
+                  Delete
+                </Button>
+              </div>
+            </div>
           )}
         </motion.div>
       </AnimatePresence>

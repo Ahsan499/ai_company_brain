@@ -16,6 +16,7 @@ import ProfileCard from './ProfileCard';
 import ProfileMenuItem from './ProfileMenuItem';
 import ThemeSwitcher from './ThemeSwitcher';
 import StorageCard from './StorageCard';
+import { useAuth } from '../../context/AuthContext';
 
 const SectionLabel = ({ children }) => (
   <p className="px-2.5 mb-1 mt-0.5 text-[10.5px] font-semibold uppercase tracking-[0.08em] text-slate-400/90">
@@ -30,10 +31,16 @@ const ProfileDropdown = ({ open, onClose, anchorRef }) => {
   const panelRef = useRef(null);
   const navigate = useNavigate();
   const [theme, setTheme] = useState('light');
+  const { logout } = useAuth();
 
   const go = (path) => {
     onClose?.();
     if (path) navigate(path);
+  };
+
+  const handleLogout = async () => {
+    onClose?.();
+    await logout();
   };
 
   useEffect(() => {
@@ -205,6 +212,7 @@ const ProfileDropdown = ({ open, onClose, anchorRef }) => {
                   role="menuitem"
                   whileHover={{ x: 1 }}
                   whileTap={{ scale: 0.992 }}
+                  onClick={handleLogout}
                   className="
                     group flex w-full items-center gap-3
                     rounded-[14px] px-2.5 py-2 sm:py-[9px]

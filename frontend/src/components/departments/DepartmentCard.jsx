@@ -60,11 +60,11 @@ const DepartmentCard = ({ dept, index = 0 }) => {
           <StatusBadge status={dept.status === 'active' ? 'active' : 'suspended'} />
           <span className="inline-flex items-center gap-1 text-[11.5px] font-medium text-secondaryText">
             <Users2 size={12} className="text-slate-400" />
-            {dept.memberIds.length} members
+            {dept.memberCount ?? dept.memberIds?.length ?? 0} members
           </span>
           <span className="inline-flex items-center gap-1 text-[11.5px] font-medium text-secondaryText">
             <FolderKanban size={12} className="text-slate-400" />
-            {dept.projectCount} projects
+            {dept.projectCount ?? 0} projects
           </span>
         </div>
       </Link>

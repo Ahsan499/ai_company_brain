@@ -8,6 +8,7 @@ import {
   Plus,
   UserPlus,
   HardDrive,
+  Building2,
 } from 'lucide-react';
 import Button from '../../components/ui/Button';
 import DashboardPanel from '../../components/dashboard/DashboardPanel';
@@ -19,6 +20,9 @@ import UpcomingMeetings from '../../components/dashboard/UpcomingMeetings';
 import QuickActions from '../../components/dashboard/QuickActions';
 import ActivityTimeline from '../../components/dashboard/ActivityTimeline';
 import EmptyState from '../../components/dashboard/EmptyState';
+import Skeleton from '../../components/ui/Skeleton';
+import { useAuth } from '../../context/AuthContext';
+import { useDashboardOverview } from '../../hooks/useDashboard';
 
 const ONLINE_MEMBERS = [
   { initials: 'AH', name: 'Ahsan Hassan' },
@@ -34,6 +38,10 @@ const DEADLINES = [
 ];
 
 const Dashboard = () => {
+  const { user } = useAuth();
+  const { data: overview, isLoading: overviewLoading } = useDashboardOverview();
+  const firstName = (user?.name || 'there').split(' ')[0];
+
   return (
     <div className="mx-auto max-w-[1600px] space-y-5 sm:space-y-6 xl:space-y-7">
       {/* Welcome — same structure, refined type & spacing */}
@@ -48,7 +56,7 @@ const Dashboard = () => {
             Workspace overview
           </p>
           <h1 className="text-[26px] sm:text-[32px] font-bold text-heading tracking-tight leading-[1.15]">
-            Good Morning, Ahsan 👋
+            Good Morning, {firstName} 👋
           </h1>
           <p className="mt-2 text-[13px] sm:text-[15px] text-secondaryText max-w-xl leading-relaxed">
             Welcome back. Here&apos;s everything happening across your workspace today.
@@ -66,13 +74,40 @@ const Dashboard = () => {
         </div>
       </motion.section>
 
-      {/* Stats */}
+      {/* Stats — Users + Organizations from API; Projects/Tasks/Meetings remain dummy until those modules wire */}
       <section className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3.5 sm:gap-4 xl:gap-5">
         <StatCard title="Projects" value="24" growth="+12%" icon={FolderKanban} tone="blue" delay={0.04} />
         <StatCard title="Tasks" value="189" growth="+18%" icon={CheckCircle2} tone="green" delay={0.08} />
-        <StatCard title="Users" value="42" growth="+3 Members" icon={Users} tone="purple" delay={0.12} />
+        {overviewLoading ? (
+          <Skeleton className="h-[118px] w-full" rounded="rounded-[20px]" />
+        ) : (
+          <StatCard
+            title="Users"
+            value={String(overview?.activeUsersTotal ?? '—')}
+            growth="Active"
+            icon={Users}
+            tone="purple"
+            delay={0.12}
+          />
+        )}
         <StatCard title="Meetings" value="6" growth="Today" icon={CalendarDays} tone="orange" delay={0.16} />
       </section>
+
+      {overviewLoading ? (
+        <Skeleton className="h-[72px] w-full max-w-sm" rounded="rounded-[18px]" />
+      ) : (
+        <div className="inline-flex items-center gap-2.5 rounded-[18px] border border-border/45 bg-white/90 px-4 py-3 shadow-sm">
+          <span className="flex h-9 w-9 items-center justify-center rounded-[11px] bg-gradient-to-br from-[#EFF6FF] to-[#BFDBFE] text-primary ring-1 ring-primary/10">
+            <Building2 size={15} strokeWidth={2} />
+          </span>
+          <div>
+            <p className="text-[18px] font-semibold text-heading tabular-nums leading-none">
+              {overview?.organizationsTotal ?? '—'}
+            </p>
+            <p className="mt-1 text-[12px] font-medium text-secondaryText">Organizations</p>
+          </div>
+        </div>
+      )}
 
       {/* Charts + right rail — same grid */}
       <section className="grid grid-cols-1 xl:grid-cols-12 gap-3.5 sm:gap-4 xl:gap-5">

@@ -1,6 +1,5 @@
 import { Search, SlidersHorizontal, LayoutGrid, List } from 'lucide-react';
 import { USER_ROLES, USER_STATUSES, DEPARTMENTS } from './userData';
-import { ORGANIZATIONS } from '../organizations/organizationData';
 
 const selectClass =
   'h-10 rounded-xl border border-border/60 bg-white px-3 text-[12.5px] font-medium text-heading focus:outline-none focus:border-primary/40 focus:ring-[3px] focus:ring-primary/12';
@@ -16,6 +15,7 @@ const UserFilterBar = ({
   onStatusChange,
   organizationId,
   onOrganizationChange,
+  organizations = [],
   view,
   onViewChange,
 }) => {
@@ -142,7 +142,7 @@ const UserFilterBar = ({
           aria-label="Filter by organization"
         >
           <option value="all">All organizations</option>
-          {ORGANIZATIONS.map((o) => (
+          {organizations.map((o) => (
             <option key={o.id} value={o.id}>
               {o.name}
             </option>

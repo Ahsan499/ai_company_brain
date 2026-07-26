@@ -4,13 +4,20 @@ import { ArrowUpRight, FolderKanban, Layers, Users2 } from 'lucide-react';
 import TeamLeadBadge from './TeamLeadBadge';
 import { getProjectById } from '../projects/projectData';
 
-const TeamCard = ({ team, index = 0 }) => {
-  if (!team) return null;
-
-  const activeProjects = team.projectIds.filter((id) => {
+const projectDisplayCount = (team) => {
+  if (typeof team.projectCount === 'number') return team.projectCount;
+  if (!Array.isArray(team.projectIds)) return 0;
+  return team.projectIds.filter((id) => {
     const p = getProjectById(id);
     return p && p.status === 'active';
   }).length;
+};
+
+const TeamCard = ({ team, index = 0 }) => {
+  if (!team) return null;
+
+  const memberCount = team.memberCount ?? team.memberIds?.length ?? 0;
+  const projectsLabel = projectDisplayCount(team);
 
   return (
     <motion.div
@@ -88,11 +95,11 @@ const TeamCard = ({ team, index = 0 }) => {
         <div className="mt-4 flex flex-wrap items-center gap-2.5 border-t border-border/40 pt-3">
           <span className="inline-flex items-center gap-1 text-[11.5px] font-medium text-secondaryText">
             <Users2 size={12} className="text-slate-400" />
-            {team.memberIds.length} members
+            {memberCount} members
           </span>
           <span className="inline-flex items-center gap-1 text-[11.5px] font-medium text-secondaryText">
             <FolderKanban size={12} className="text-slate-400" />
-            {activeProjects} active
+            {projectsLabel} projects
           </span>
         </div>
       </Link>

@@ -50,7 +50,13 @@ const UserCard = ({ user, index = 0, selected = false, onToggle }) => {
       </div>
 
       <div className="mt-3.5 space-y-1.5 border-t border-border/40 pt-3 text-[12px] text-secondaryText">
-        <p className="truncate">{user.department} · {user.team}</p>
+        <p className="truncate">
+          {user.departmentName
+            || (typeof user.department === 'string' ? user.department : user.department?.name)
+            || '—'}
+          {' · '}
+          {typeof user.team === 'string' ? user.team : user.team?.name || user.teamName || '—'}
+        </p>
         <Link
           to={`/dashboard/organizations/${user.organizationId}`}
           className="inline-flex items-center gap-1.5 font-medium text-heading hover:text-primary transition-colors truncate max-w-full"

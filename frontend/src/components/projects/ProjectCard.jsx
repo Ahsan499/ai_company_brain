@@ -10,7 +10,20 @@ import { projectTaskStats } from '../tasks/taskData';
 
 const ProjectCard = ({ project, index = 0, compact = false }) => {
   if (!project) return null;
-  const stats = projectTaskStats(project.id);
+
+  // Prefer API taskCounts (real ProjectResource); fall back to dummy catalog stats.
+  const apiCounts = project.taskCounts;
+  const dummyStats = !apiCounts ? projectTaskStats(project.id) : null;
+  const done = apiCounts?.done ?? project.tasksDone ?? dummyStats?.done ?? 0;
+  const total = apiCounts?.total ?? project.tasksTotal ?? dummyStats?.total ?? 0;
+  const organizationName =
+    project.organizationName ||
+    (typeof project.organization === 'string' ? project.organization : project.organization?.name) ||
+    '—';
+  const departmentName =
+    project.departmentName ||
+    (typeof project.department === 'string' ? project.department : project.department?.name) ||
+    '—';
 
   return (
     <motion.div
@@ -44,10 +57,10 @@ const ProjectCard = ({ project, index = 0, compact = false }) => {
 
         <div className="mt-2.5 flex flex-wrap gap-1.5">
           <span className="rounded-md bg-slate-50 px-1.5 py-0.5 text-[10px] font-semibold text-secondaryText ring-1 ring-slate-200/70 truncate max-w-[140px]">
-            {project.organizationName}
+            {organizationName}
           </span>
           <span className="rounded-md bg-primary/5 px-1.5 py-0.5 text-[10px] font-semibold text-primary ring-1 ring-primary/10 truncate max-w-[100px]">
-            {project.departmentName}
+            {departmentName}
           </span>
         </div>
 
@@ -61,11 +74,11 @@ const ProjectCard = ({ project, index = 0, compact = false }) => {
         </div>
 
         <div className="mt-4 flex items-center justify-between gap-2 border-t border-border/40 pt-3">
-          <MemberAvatarStack members={project.members} max={4} size="sm" />
+          <MemberAvatarStack members={project.members || []} max={4} size="sm" />
           <div className="text-right min-w-0">
             <p className="inline-flex items-center gap-1 text-[11px] font-medium text-secondaryText tabular-nums">
               <CheckSquare size={11} className="text-slate-400" />
-              {stats.done}/{stats.total} tasks
+              {done}/{total} tasks
             </p>
             <p className="mt-0.5 inline-flex items-center gap-1 text-[10.5px] text-slate-400">
               <CalendarDays size={10} />

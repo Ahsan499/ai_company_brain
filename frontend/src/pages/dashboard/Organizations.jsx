@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
 import {
   Building2,
@@ -7,39 +7,69 @@ import {
   LayoutGrid,
   List,
   SlidersHorizontal,
+  CheckCircle2,
 } from 'lucide-react';
 import Button from '../../components/ui/Button';
+import Skeleton from '../../components/ui/Skeleton';
+import ErrorState from '../../components/ui/ErrorState';
 import EmptyState from '../../components/dashboard/EmptyState';
 import OrganizationCard from '../../components/organizations/OrganizationCard';
 import OrganizationTable from '../../components/organizations/OrganizationTable';
 import CreateOrganizationModal from '../../components/organizations/CreateOrganizationModal';
-import {
-  ORGANIZATIONS,
-  filterOrganizations,
-} from '../../components/organizations/organizationData';
+import { useOrganizations } from '../../hooks/useOrganizations';
 
 const PAGE_SIZE = 6;
 
+const OrganizationsSkeleton = ({ view }) => {
+  if (view === 'table') {
+    return (
+      <div className="rounded-[20px] border border-border/45 bg-white/90 p-4 space-y-3">
+        {Array.from({ length: 5 }).map((_, i) => (
+          <Skeleton key={i} className="h-12 w-full" />
+        ))}
+      </div>
+    );
+  }
+
+  return (
+    <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3.5 sm:gap-4">
+      {Array.from({ length: 6 }).map((_, i) => (
+        <Skeleton key={i} className="h-[200px] w-full" rounded="rounded-[20px]" />
+      ))}
+    </div>
+  );
+};
+
 const Organizations = () => {
   const [query, setQuery] = useState('');
+  const [debouncedQuery, setDebouncedQuery] = useState('');
   const [status, setStatus] = useState('all');
   const [plan, setPlan] = useState('all');
   const [view, setView] = useState('grid');
   const [page, setPage] = useState(1);
   const [createOpen, setCreateOpen] = useState(false);
+  const [successMsg, setSuccessMsg] = useState('');
 
-  const filtered = useMemo(
-    () => filterOrganizations(ORGANIZATIONS, { query, status, plan }),
-    [query, status, plan]
-  );
+  useEffect(() => {
+    const t = window.setTimeout(() => setDebouncedQuery(query.trim()), 300);
+    return () => window.clearTimeout(t);
+  }, [query]);
 
-  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
-  const currentPage = Math.min(page, totalPages);
-  const pageItems = filtered.slice(0, currentPage * PAGE_SIZE);
-  const hasMore = pageItems.length < filtered.length;
+  const { data, isLoading, isFetching, isError, error, refetch } = useOrganizations({
+    search: debouncedQuery,
+    status,
+    plan,
+    page,
+    perPage: PAGE_SIZE,
+  });
+
+  const organizations = data?.data ?? [];
+  const meta = data?.meta ?? { currentPage: 1, lastPage: 1, total: 0 };
+  const showEmpty = !isLoading && !isError && organizations.length === 0;
 
   const resetFilters = () => {
     setQuery('');
+    setDebouncedQuery('');
     setStatus('all');
     setPlan('all');
     setPage(1);
@@ -64,7 +94,7 @@ const Organizations = () => {
               <Building2 size={17} strokeWidth={2} />
             </span>
             <span className="rounded-full bg-primary/10 px-2.5 py-0.5 text-[11px] font-semibold text-primary ring-1 ring-primary/12">
-              {ORGANIZATIONS.length} workspaces
+              {meta.total ?? '—'} workspaces
             </span>
           </div>
           <h1 className="text-[26px] sm:text-[30px] font-bold text-heading tracking-tight leading-tight">
@@ -85,6 +115,16 @@ const Organizations = () => {
           New Organization
         </Button>
       </motion.section>
+
+      {successMsg ? (
+        <div
+          role="status"
+          className="flex items-center gap-2 rounded-xl border border-emerald-500/20 bg-emerald-50 px-3.5 py-2.5 text-[13px] font-medium text-emerald-800"
+        >
+          <CheckCircle2 size={16} className="text-emerald-600 shrink-0" />
+          {successMsg}
+        </div>
+      ) : null}
 
       <motion.div
         initial={{ opacity: 0, y: 10 }}
@@ -191,7 +231,15 @@ const Organizations = () => {
         </div>
       </motion.div>
 
-      {filtered.length === 0 ? (
+      {isError ? (
+        <ErrorState
+          title="Couldn’t load organizations"
+          message={error?.response?.data?.message || error?.message || 'Please try again.'}
+          onRetry={() => refetch()}
+        />
+      ) : isLoading ? (
+        <OrganizationsSkeleton view={view} />
+      ) : showEmpty ? (
         <div className="rounded-[20px] border border-border/45 bg-white/85 py-6 shadow-sm">
           <EmptyState
             icon={Building2}
@@ -205,38 +253,60 @@ const Organizations = () => {
           />
         </div>
       ) : view === 'grid' ? (
-        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3.5 sm:gap-4">
-          {pageItems.map((org, i) => (
+        <div className={`grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3.5 sm:gap-4 ${isFetching ? 'opacity-80' : ''}`}>
+          {organizations.map((org, i) => (
             <OrganizationCard key={org.id} org={org} index={i} />
           ))}
         </div>
       ) : (
-        <OrganizationTable organizations={pageItems} />
-      )}
-
-      {filtered.length > 0 && (
-        <div className="flex flex-col sm:flex-row items-center justify-between gap-3 pt-1">
-          <p className="text-[12.5px] text-secondaryText">
-            Showing{' '}
-            <span className="font-semibold text-heading tabular-nums">{pageItems.length}</span>
-            {' '}of{' '}
-            <span className="font-semibold text-heading tabular-nums">{filtered.length}</span>
-            {' '}organizations
-          </p>
-          {hasMore && (
-            <Button
-              type="button"
-              variant="secondary"
-              onClick={() => setPage((p) => p + 1)}
-              className="rounded-xl h-10 text-[13px] font-semibold bg-white/90"
-            >
-              Load more
-            </Button>
-          )}
+        <div className={isFetching ? 'opacity-80' : ''}>
+          <OrganizationTable organizations={organizations} />
         </div>
       )}
 
-      <CreateOrganizationModal open={createOpen} onClose={() => setCreateOpen(false)} />
+      {!isLoading && !isError && organizations.length > 0 && (
+        <div className="flex flex-col sm:flex-row items-center justify-between gap-3 pt-1">
+          <p className="text-[12.5px] text-secondaryText">
+            Page{' '}
+            <span className="font-semibold text-heading tabular-nums">{meta.currentPage}</span>
+            {' '}of{' '}
+            <span className="font-semibold text-heading tabular-nums">{meta.lastPage}</span>
+            {' · '}
+            <span className="font-semibold text-heading tabular-nums">{meta.total}</span>
+            {' '}organizations
+          </p>
+          <div className="flex items-center gap-2">
+            <Button
+              type="button"
+              variant="secondary"
+              disabled={meta.currentPage <= 1}
+              onClick={() => setPage((p) => Math.max(1, p - 1))}
+              className="h-10 rounded-xl text-[13px] font-semibold bg-white/90 disabled:opacity-40"
+            >
+              Previous
+            </Button>
+            <Button
+              type="button"
+              variant="secondary"
+              disabled={meta.currentPage >= meta.lastPage}
+              onClick={() => setPage((p) => p + 1)}
+              className="h-10 rounded-xl text-[13px] font-semibold bg-white/90 disabled:opacity-40"
+            >
+              Next
+            </Button>
+          </div>
+        </div>
+      )}
+
+      <CreateOrganizationModal
+        open={createOpen}
+        onClose={() => setCreateOpen(false)}
+        onCreated={(org) => {
+          setSuccessMsg(`“${org?.name || 'Organization'}” created successfully.`);
+          setPage(1);
+          window.setTimeout(() => setSuccessMsg(''), 4000);
+        }}
+      />
     </div>
   );
 };

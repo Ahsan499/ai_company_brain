@@ -20,6 +20,7 @@ import {
   X,
 } from 'lucide-react';
 import Logo from '../ui/Logo';
+import { useAuth } from '../../context/AuthContext';
 
 const NAV_ITEMS = [
   { to: '/dashboard', label: 'Dashboard', icon: LayoutDashboard, end: true },
@@ -39,7 +40,10 @@ const NAV_ITEMS = [
   { to: '/dashboard/profile', label: 'Profile', icon: UserRound },
 ];
 
-const SidebarContent = ({ onNavigate }) => (
+const SidebarContent = ({ onNavigate }) => {
+  const { logout } = useAuth();
+
+  return (
   <div className="flex h-full flex-col">
     <div className="px-5 pt-6 pb-5 shrink-0 border-b border-border/40">
       <Logo iconSize={26} tagline="Smart. Organized. Productive." />
@@ -113,6 +117,10 @@ const SidebarContent = ({ onNavigate }) => (
       </div>
       <button
         type="button"
+        onClick={() => {
+          onNavigate?.();
+          logout();
+        }}
         className="
           flex w-full items-center gap-3 rounded-xl px-3 py-2.5
           text-[13px] font-medium text-error/90
@@ -125,7 +133,8 @@ const SidebarContent = ({ onNavigate }) => (
       </button>
     </div>
   </div>
-);
+  );
+};
 
 const Sidebar = ({ open, onClose }) => {
   return (

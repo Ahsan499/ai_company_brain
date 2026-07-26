@@ -73,7 +73,9 @@ const UserRow = ({
         <RoleBadge role={user.role} />
       </td>
       <td className="px-3 py-3 hidden md:table-cell text-[12.5px] text-secondaryText">
-        {user.department}
+        {user.departmentName
+          || (typeof user.department === 'string' ? user.department : user.department?.name)
+          || '—'}
       </td>
       <td className="px-3 py-3 hidden lg:table-cell">
         <Link

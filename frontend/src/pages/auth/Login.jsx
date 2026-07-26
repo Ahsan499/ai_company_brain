@@ -2,15 +2,19 @@ import React, { useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { motion } from 'framer-motion';
 import { Mail, Lock, Eye, EyeOff } from 'lucide-react';
-import { Link } from 'react-router-dom';
+import { Link, Navigate, useNavigate } from 'react-router-dom';
 import Button from '../../components/ui/Button';
 import Input from '../../components/ui/Input';
 import Checkbox from '../../components/ui/Checkbox';
 import Card from '../../components/ui/Card';
+import { useAuth } from '../../context/AuthContext';
 
 const Login = () => {
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  const [formError, setFormError] = useState('');
+  const { login, extractErrorMessage, isAuthenticated, isLoading: authLoading } = useAuth();
+  const navigate = useNavigate();
 
   const {
     register,
@@ -24,10 +28,34 @@ const Login = () => {
     },
   });
 
-  const onSubmit = () => {
+  const onSubmit = async ({ email, password }) => {
+    setFormError('');
     setIsLoading(true);
-    setTimeout(() => setIsLoading(false), 1500);
+    try {
+      await login(email, password);
+      navigate('/dashboard', { replace: true });
+    } catch (error) {
+      setFormError(extractErrorMessage(error, 'Invalid credentials.'));
+    } finally {
+      setIsLoading(false);
+    }
   };
+
+  if (authLoading) {
+    return (
+      <div className="w-full flex flex-col items-center justify-center gap-3 py-16">
+        <div
+          className="h-9 w-9 rounded-full border-2 border-primary/25 border-t-primary animate-spin"
+          aria-hidden
+        />
+        <p className="text-sm text-secondaryText">Checking session…</p>
+      </div>
+    );
+  }
+
+  if (isAuthenticated) {
+    return <Navigate to="/dashboard" replace />;
+  }
 
   return (
     <motion.div
@@ -47,6 +75,15 @@ const Login = () => {
         </div>
 
         <form onSubmit={handleSubmit(onSubmit)} className="space-y-4 sm:space-y-5" noValidate>
+          {formError ? (
+            <div
+              role="alert"
+              className="rounded-lg border border-error/20 bg-red-50 px-3.5 py-2.5 text-sm text-error"
+            >
+              {formError}
+            </div>
+          ) : null}
+
           <Input
             label="Email address"
             type="email"

@@ -22,6 +22,8 @@ import {
   FileText,
 } from 'lucide-react';
 import Button from '../../components/ui/Button';
+import Skeleton from '../../components/ui/Skeleton';
+import ErrorState from '../../components/ui/ErrorState';
 import EmptyState from '../../components/dashboard/EmptyState';
 import ActivityTimeline from '../../components/dashboard/ActivityTimeline';
 import RoleBadge from '../../components/users/RoleBadge';
@@ -29,12 +31,7 @@ import StatusBadge from '../../components/users/StatusBadge';
 import ProjectCard from '../../components/projects/ProjectCard';
 import TaskRow from '../../components/tasks/TaskRow';
 import FileTypeIcon from '../../components/files/FileTypeIcon';
-import {
-  getUserById,
-  formatJoinedDate,
-} from '../../components/users/userData';
-import { getProjectsByUser } from '../../components/projects/projectData';
-import { getTasksByAssignee } from '../../components/tasks/taskData';
+import { formatJoinedDate } from '../../components/users/userData';
 import {
   getTeamsByUser,
   getTeamsLedByUser,
@@ -52,6 +49,13 @@ import {
   formatFileDate,
   getFilesByUploader,
 } from '../../components/files/fileData';
+import {
+  useUpdateUser,
+  useUser,
+  useUserProjects,
+  useUserTasks,
+} from '../../hooks/useUsers';
+import { getApiErrorMessage } from '../../lib/api';
 
 const TABS = [
   { id: 'overview', label: 'Overview' },
@@ -79,14 +83,18 @@ const StatMini = ({ icon: Icon, label, value, tone }) => (
 const UserDetail = () => {
   const { id } = useParams();
   const navigate = useNavigate();
-  const user = useMemo(() => getUserById(id), [id]);
+  const { data: user, isLoading, isError, error, refetch } = useUser(id);
+  const { data: tasksData, isLoading: tasksLoading } = useUserTasks(id);
+  const { data: projectsData, isLoading: projectsLoading } = useUserProjects(id);
+  const updateUser = useUpdateUser();
   const [tab, setTab] = useState('overview');
   const [statusOverrides, setStatusOverrides] = useState({});
-  const userProjects = useMemo(
-    () => (user ? getProjectsByUser(user.id) : []),
-    [user]
-  );
+  const [actionError, setActionError] = useState('');
+  const [actionMsg, setActionMsg] = useState('');
 
+  const userProjects = projectsData?.data ?? [];
+
+  // Teams / meetings / files remain on dummy catalogs until those modules are wired.
   const userTeams = useMemo(
     () => (user ? getTeamsByUser(user.id) : []),
     [user]
@@ -117,10 +125,7 @@ const UserDetail = () => {
       .slice(0, 5);
   }, [user]);
 
-  const baseTasks = useMemo(
-    () => (user ? getTasksByAssignee(user.id) : []),
-    [user]
-  );
+  const baseTasks = tasksData?.data ?? [];
 
   const userTasks = useMemo(
     () =>
@@ -130,12 +135,57 @@ const UserDetail = () => {
     [baseTasks, statusOverrides]
   );
 
+  const departmentLabel =
+    user?.departmentName ||
+    (typeof user?.department === 'string' ? user.department : user?.department?.name) ||
+    '—';
+
   const toggleTaskComplete = (taskId) => {
     const current = userTasks.find((t) => t.id === taskId);
     if (!current) return;
     const next = current.status === 'done' ? 'todo' : 'done';
     setStatusOverrides((prev) => ({ ...prev, [taskId]: next }));
   };
+
+  const handleDeactivate = async () => {
+    if (!user) return;
+    if (!window.confirm(`Deactivate ${user.name}?`)) return;
+    setActionError('');
+    try {
+      await updateUser.mutateAsync({ id: user.id, status: 'suspended' });
+      setActionMsg('User deactivated.');
+      window.setTimeout(() => setActionMsg(''), 3000);
+    } catch (err) {
+      setActionError(getApiErrorMessage(err, 'Could not deactivate user.'));
+    }
+  };
+
+  if (isLoading) {
+    return (
+      <div className="mx-auto max-w-[1600px] space-y-5">
+        <Skeleton className="h-4 w-24" />
+        <Skeleton className="h-40 w-full" rounded="rounded-[24px]" />
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+          <Skeleton className="h-24" rounded="rounded-[18px]" />
+          <Skeleton className="h-24" rounded="rounded-[18px]" />
+          <Skeleton className="h-24" rounded="rounded-[18px]" />
+          <Skeleton className="h-24" rounded="rounded-[18px]" />
+        </div>
+      </div>
+    );
+  }
+
+  if (isError) {
+    return (
+      <div className="mx-auto max-w-lg py-10">
+        <ErrorState
+          title="Couldn’t load user"
+          message={error?.response?.data?.message || error?.message}
+          onRetry={() => refetch()}
+        />
+      </div>
+    );
+  }
 
   if (!user) {
     return (
@@ -161,6 +211,18 @@ const UserDetail = () => {
 
   return (
     <div className="mx-auto max-w-[1600px] space-y-5 sm:space-y-6">
+      {(actionError || actionMsg) && (
+        <div
+          role={actionError ? 'alert' : 'status'}
+          className={`rounded-xl border px-3.5 py-2.5 text-[13px] font-medium ${
+            actionError
+              ? 'border-error/20 bg-red-50 text-error'
+              : 'border-emerald-500/20 bg-emerald-50 text-emerald-800'
+          }`}
+        >
+          {actionError || actionMsg}
+        </div>
+      )}
       <motion.div
         initial={{ opacity: 0, y: 8 }}
         animate={{ opacity: 1, y: 0 }}
@@ -207,7 +269,7 @@ const UserDetail = () => {
                   {user.email}
                 </p>
                 <div className="mt-2 flex flex-wrap gap-x-4 gap-y-2 text-[12px] text-secondaryText">
-                  <span>{user.department}</span>
+                  <span>{departmentLabel}</span>
                   <Link
                     to={`/dashboard/organizations/${user.organizationId}`}
                     className="inline-flex items-center gap-1 font-medium text-heading hover:text-primary"
@@ -245,6 +307,7 @@ const UserDetail = () => {
                 type="button"
                 variant="secondary"
                 className="h-10 rounded-xl gap-2 text-[13px] font-semibold bg-white"
+                onClick={() => setTab('settings')}
               >
                 <UserCog size={15} strokeWidth={1.9} />
                 Edit
@@ -252,6 +315,8 @@ const UserDetail = () => {
               <Button
                 type="button"
                 variant="secondary"
+                isLoading={updateUser.isPending}
+                onClick={handleDeactivate}
                 className="h-10 rounded-xl gap-2 text-[13px] font-semibold bg-white text-error border-error/20 hover:bg-red-50"
               >
                 <UserX size={15} strokeWidth={1.9} />
@@ -313,25 +378,33 @@ const UserDetail = () => {
                 <StatMini
                   icon={CheckSquare}
                   label="Tasks assigned"
-                  value={userTasks.length || user.tasksAssigned}
+                  value={userTasks.length || user.tasksAssigned || 0}
                   tone="from-[#EFF6FF] to-[#BFDBFE] text-primary ring-primary/10"
                 />
                 <StatMini
                   icon={FolderKanban}
                   label="Projects"
-                  value={user.projects}
+                  value={userProjects.length || user.projects || 0}
                   tone="from-[#ECFDF5] to-[#A7F3D0] text-emerald-600 ring-emerald-500/10"
                 />
                 <StatMini
                   icon={Timer}
                   label="Time this week"
-                  value={formatHours(getUserWeekMinutes(user.id))}
+                  value={
+                    user.hoursThisWeek != null
+                      ? `${user.hoursThisWeek}h`
+                      : formatHours(getUserWeekMinutes(user.id))
+                  }
                   tone="from-[#EEF2FF] to-[#C7D2FE] text-indigo-700 ring-indigo-500/10"
                 />
                 <StatMini
                   icon={LogIn}
                   label="Last login"
-                  value={user.lastLogin === 'Never' ? '—' : user.lastLogin.split(',')[0]}
+                  value={
+                    !user.lastLogin || user.lastLogin === 'Never'
+                      ? user.lastActive || '—'
+                      : String(user.lastLogin).split(',')[0]
+                  }
                   tone="from-[#FFFBEB] to-[#FDE68A] text-amber-700 ring-amber-500/10"
                 />
               </div>
@@ -398,17 +471,17 @@ const UserDetail = () => {
                       </div>
                     </div>
                     {[
-                      { icon: Users2, label: 'Department', value: user.department },
+                      { icon: Users2, label: 'Department', value: departmentLabel },
                       {
                         icon: UsersRound,
                         label: 'Teams',
                         value:
                           userTeams.length > 0
                             ? userTeams.map((t) => t.name).join(', ')
-                            : user.team || '—',
+                            : user.teamName || user.team?.name || '—',
                       },
                       { icon: Shield, label: 'Role', value: user.role },
-                      { icon: LogIn, label: 'Last login', value: user.lastLogin },
+                      { icon: LogIn, label: 'Last login', value: user.lastActive || user.lastLogin || '—' },
                     ].map((row) => (
                       <div key={row.label} className="flex items-start gap-3">
                         <span className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-slate-50 text-slate-500 ring-1 ring-slate-200/70">
@@ -523,7 +596,13 @@ const UserDetail = () => {
           )}
 
           {tab === 'projects' && (
-            userProjects.length === 0 ? (
+            projectsLoading ? (
+              <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3.5 sm:gap-4">
+                {Array.from({ length: 3 }).map((_, i) => (
+                  <Skeleton key={i} className="h-40 w-full" rounded="rounded-[20px]" />
+                ))}
+              </div>
+            ) : userProjects.length === 0 ? (
               <div className="rounded-[20px] border border-dashed border-border/70 bg-white/60 py-4">
                 <EmptyState
                   icon={FolderKanban}
@@ -541,7 +620,13 @@ const UserDetail = () => {
           )}
 
           {tab === 'tasks' && (
-            userTasks.length === 0 ? (
+            tasksLoading ? (
+              <div className="rounded-[20px] border border-border/45 bg-white/90 p-4 space-y-3">
+                {Array.from({ length: 5 }).map((_, i) => (
+                  <Skeleton key={i} className="h-12 w-full" />
+                ))}
+              </div>
+            ) : userTasks.length === 0 ? (
               <div className="rounded-[20px] border border-dashed border-border/70 bg-white/60 py-4">
                 <EmptyState
                   icon={CheckSquare}

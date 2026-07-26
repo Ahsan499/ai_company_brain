@@ -4,26 +4,38 @@ import { UserPlus, X } from 'lucide-react';
 import Button from '../ui/Button';
 import Input from '../ui/Input';
 import { USER_ROLES, DEPARTMENTS } from './userData';
-import { ORGANIZATIONS } from '../organizations/organizationData';
+import { useOrganizations } from '../../hooks/useOrganizations';
+import { useCreateUser } from '../../hooks/useUsers';
+import { getApiErrorMessage, getApiFieldErrors } from '../../lib/api';
 
-const INITIAL = {
-  name: '',
-  email: '',
-  role: 'Employee',
-  department: 'Engineering',
-  organizationId: ORGANIZATIONS[0]?.id || '',
-};
-
-const InviteUserForm = ({ onClose }) => {
+const InviteUserForm = ({ onClose, onCreated }) => {
   const titleId = useId();
   const firstRef = useRef(null);
-  const [form, setForm] = useState(INITIAL);
+  const { data: orgsData } = useOrganizations({ perPage: 100, page: 1 });
+  const organizations = orgsData?.data ?? [];
+  const createUser = useCreateUser();
+
+  const [form, setForm] = useState({
+    name: '',
+    email: '',
+    role: 'Employee',
+    department: 'Engineering',
+    organizationId: '',
+  });
+  const [fieldErrors, setFieldErrors] = useState({});
+  const [formError, setFormError] = useState('');
+
+  useEffect(() => {
+    if (!form.organizationId && organizations[0]?.id) {
+      setForm((prev) => ({ ...prev, organizationId: String(organizations[0].id) }));
+    }
+  }, [organizations, form.organizationId]);
 
   useEffect(() => {
     const t = window.setTimeout(() => firstRef.current?.focus(), 50);
     document.body.style.overflow = 'hidden';
     const onKey = (e) => {
-      if (e.key === 'Escape') onClose?.();
+      if (e.key === 'Escape' && !createUser.isPending) onClose?.();
     };
     document.addEventListener('keydown', onKey);
     return () => {
@@ -31,13 +43,38 @@ const InviteUserForm = ({ onClose }) => {
       document.body.style.overflow = '';
       document.removeEventListener('keydown', onKey);
     };
-  }, [onClose]);
+  }, [onClose, createUser.isPending]);
 
-  const set = (key) => (e) => setForm((prev) => ({ ...prev, [key]: e.target.value }));
+  const set = (key) => (e) => {
+    setForm((prev) => ({ ...prev, [key]: e.target.value }));
+    setFieldErrors((prev) => {
+      if (!prev[key] && !prev.organization_id) return prev;
+      const next = { ...prev };
+      delete next[key];
+      delete next.organization_id;
+      delete next.organizationId;
+      return next;
+    });
+  };
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
-    onClose?.();
+    setFormError('');
+    setFieldErrors({});
+    try {
+      const user = await createUser.mutateAsync({
+        name: form.name,
+        email: form.email,
+        role: form.role,
+        department: form.department,
+        organizationId: Number(form.organizationId),
+      });
+      onCreated?.(user);
+      onClose?.();
+    } catch (error) {
+      setFieldErrors(getApiFieldErrors(error));
+      setFormError(getApiErrorMessage(error, 'Could not invite user.'));
+    }
   };
 
   return (
@@ -79,6 +116,7 @@ const InviteUserForm = ({ onClose }) => {
         <button
           type="button"
           onClick={onClose}
+          disabled={createUser.isPending}
           className="h-9 w-9 inline-flex items-center justify-center rounded-xl text-secondaryText hover:bg-slate-100 hover:text-heading transition-colors"
           aria-label="Close"
         >
@@ -87,6 +125,12 @@ const InviteUserForm = ({ onClose }) => {
       </div>
 
       <form onSubmit={handleSubmit} className="space-y-4">
+        {formError ? (
+          <div role="alert" className="rounded-xl border border-error/20 bg-red-50 px-3.5 py-2.5 text-sm text-error">
+            {formError}
+          </div>
+        ) : null}
+
         <Input
           ref={firstRef}
           label="Full name"
@@ -94,6 +138,7 @@ const InviteUserForm = ({ onClose }) => {
           value={form.name}
           onChange={set('name')}
           required
+          error={fieldErrors.name}
           className="rounded-xl"
         />
         <Input
@@ -103,6 +148,7 @@ const InviteUserForm = ({ onClose }) => {
           value={form.email}
           onChange={set('email')}
           required
+          error={fieldErrors.email}
           className="rounded-xl"
         />
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
@@ -119,6 +165,7 @@ const InviteUserForm = ({ onClose }) => {
                 </option>
               ))}
             </select>
+            {fieldErrors.role ? <p className="mt-1.5 text-sm text-error">{fieldErrors.role}</p> : null}
           </div>
           <div>
             <label className="block text-sm font-medium text-heading mb-1.5">Department</label>
@@ -140,23 +187,40 @@ const InviteUserForm = ({ onClose }) => {
           <select
             value={form.organizationId}
             onChange={set('organizationId')}
+            required
             className="block w-full rounded-xl border border-border bg-white px-3 py-2.5 text-sm text-heading focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
           >
-            {ORGANIZATIONS.map((o) => (
-              <option key={o.id} value={o.id}>
-                {o.name}
-              </option>
-            ))}
+            {organizations.length === 0 ? (
+              <option value="">Loading organizations…</option>
+            ) : (
+              organizations.map((o) => (
+                <option key={o.id} value={o.id}>
+                  {o.name}
+                </option>
+              ))
+            )}
           </select>
+          {fieldErrors.organizationId || fieldErrors.organization_id ? (
+            <p className="mt-1.5 text-sm text-error">
+              {fieldErrors.organizationId || fieldErrors.organization_id}
+            </p>
+          ) : null}
         </div>
 
         <div className="flex flex-col-reverse sm:flex-row sm:justify-end gap-2.5 pt-2">
-          <Button type="button" variant="secondary" onClick={onClose} className="rounded-xl">
+          <Button
+            type="button"
+            variant="secondary"
+            onClick={onClose}
+            disabled={createUser.isPending}
+            className="rounded-xl"
+          >
             Cancel
           </Button>
           <Button
             type="submit"
             variant="primary"
+            isLoading={createUser.isPending}
             className="rounded-xl shadow-[0_6px_16px_rgba(37,99,235,0.25)]"
           >
             Send Invite
@@ -167,7 +231,7 @@ const InviteUserForm = ({ onClose }) => {
   );
 };
 
-const InviteUserModal = ({ open, onClose }) => (
+const InviteUserModal = ({ open, onClose, onCreated }) => (
   <AnimatePresence>
     {open && (
       <div className="fixed inset-0 z-[85] flex items-end sm:items-center justify-center p-0 sm:p-6">
@@ -180,7 +244,7 @@ const InviteUserModal = ({ open, onClose }) => (
           exit={{ opacity: 0 }}
           onClick={onClose}
         />
-        <InviteUserForm onClose={onClose} />
+        <InviteUserForm onClose={onClose} onCreated={onCreated} />
       </div>
     )}
   </AnimatePresence>
