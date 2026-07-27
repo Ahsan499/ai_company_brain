@@ -1,6 +1,7 @@
 import { Link } from 'react-router-dom';
+import { Trash2 } from 'lucide-react';
 
-const TaskComment = ({ comment }) => {
+const TaskComment = ({ comment, canDelete = false, onDelete, deleting = false }) => {
   if (!comment) return null;
 
   return (
@@ -19,7 +20,20 @@ const TaskComment = ({ comment }) => {
           >
             {comment.userName}
           </Link>
-          <span className="shrink-0 text-[10.5px] font-medium text-slate-400">{comment.time}</span>
+          <div className="shrink-0 flex items-center gap-1.5">
+            <span className="text-[10.5px] font-medium text-slate-400">{comment.time}</span>
+            {canDelete ? (
+              <button
+                type="button"
+                onClick={onDelete}
+                disabled={deleting}
+                className="text-slate-400 hover:text-error disabled:opacity-50"
+                aria-label="Delete comment"
+              >
+                <Trash2 size={12} />
+              </button>
+            ) : null}
+          </div>
         </div>
         <p className="mt-1 text-[12.5px] text-secondaryText leading-relaxed">{comment.text}</p>
       </div>

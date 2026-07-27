@@ -3,9 +3,11 @@ import { AnimatePresence, motion } from 'framer-motion';
 import { Video, X } from 'lucide-react';
 import Button from '../ui/Button';
 import Input from '../ui/Input';
-import { PROJECTS } from '../projects/projectData';
-import { TEAMS } from '../teams/teamData';
-import { USERS } from '../users/userData';
+import { useProjects } from '../../hooks/useProjects';
+import { useTeams } from '../../hooks/useTeams';
+import { useUsers } from '../../hooks/useUsers';
+import { useCreateMeeting } from '../../hooks/useMeetings';
+import { getApiErrorMessage, getApiFieldErrors } from '../../lib/api';
 
 const INITIAL = {
   title: '',
@@ -15,18 +17,26 @@ const INITIAL = {
   projectId: '',
   teamId: '',
   type: 'video',
-  agenda: '',
+  location: '',
+  description: '',
   attendeeIds: [],
 };
 
-const CreateMeetingForm = ({ onClose }) => {
+const CreateMeetingForm = ({ onClose, onSuccess }) => {
   const titleId = useId();
   const firstRef = useRef(null);
-  const [form, setForm] = useState(() => ({
-    ...INITIAL,
-    projectId: PROJECTS[0]?.id || '',
-    attendeeIds: USERS[0] ? [USERS[0].id] : [],
-  }));
+  const [form, setForm] = useState(INITIAL);
+  const [formError, setFormError] = useState('');
+  const [fieldErrors, setFieldErrors] = useState({});
+
+  const { data: projectsData } = useProjects({ perPage: 100 });
+  const { data: teamsData } = useTeams({ perPage: 100 });
+  const { data: usersData } = useUsers({ perPage: 100 });
+  const createMeeting = useCreateMeeting();
+
+  const projects = projectsData?.data ?? [];
+  const teams = teamsData?.data ?? [];
+  const users = usersData?.data ?? [];
 
   useEffect(() => {
     const t = window.setTimeout(() => firstRef.current?.focus(), 50);
@@ -42,14 +52,17 @@ const CreateMeetingForm = ({ onClose }) => {
     };
   }, [onClose]);
 
-  const set = (key) => (e) => setForm((prev) => ({ ...prev, [key]: e.target.value }));
+  const set = (key) => (e) => {
+    setFieldErrors((prev) => ({ ...prev, [key]: undefined }));
+    setForm((prev) => ({ ...prev, [key]: e.target.value }));
+  };
 
   const filteredTeams = useMemo(() => {
-    if (!form.projectId) return TEAMS;
-    const project = PROJECTS.find((p) => p.id === form.projectId);
-    if (!project) return TEAMS;
-    return TEAMS.filter((t) => t.organizationId === project.organizationId);
-  }, [form.projectId]);
+    if (!form.projectId) return teams;
+    const project = projects.find((p) => String(p.id) === String(form.projectId));
+    if (!project) return teams;
+    return teams.filter((t) => t.organizationId === project.organizationId);
+  }, [form.projectId, teams, projects]);
 
   const toggleAttendee = (userId) => {
     setForm((prev) => {
@@ -63,9 +76,29 @@ const CreateMeetingForm = ({ onClose }) => {
     });
   };
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
-    onClose?.();
+    setFormError('');
+    setFieldErrors({});
+
+    try {
+      await createMeeting.mutateAsync({
+        title: form.title,
+        date: form.date,
+        start_time: form.time,
+        duration_minutes: Number(form.duration),
+        project_id: form.projectId || null,
+        team_id: form.teamId || null,
+        type: form.type,
+        location: form.location || null,
+        description: form.description || null,
+        attendee_ids: form.attendeeIds,
+      });
+      onSuccess?.();
+    } catch (err) {
+      setFormError(getApiErrorMessage(err));
+      setFieldErrors(getApiFieldErrors(err));
+    }
   };
 
   return (
@@ -114,6 +147,12 @@ const CreateMeetingForm = ({ onClose }) => {
         </button>
       </div>
 
+      {formError && (
+        <div className="mb-4 rounded-xl border border-red-200 bg-red-50 px-3.5 py-2.5 text-[13px] font-medium text-red-700">
+          {formError}
+        </div>
+      )}
+
       <form onSubmit={handleSubmit} className="space-y-4">
         <Input
           ref={firstRef}
@@ -123,6 +162,7 @@ const CreateMeetingForm = ({ onClose }) => {
           onChange={set('title')}
           required
           className="rounded-xl"
+          error={fieldErrors.title}
         />
 
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
@@ -135,6 +175,7 @@ const CreateMeetingForm = ({ onClose }) => {
               required
               className="block w-full rounded-xl border border-border bg-white px-3 py-2.5 text-sm text-heading focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
             />
+            {fieldErrors.date && <p className="mt-1 text-xs text-red-600">{fieldErrors.date}</p>}
           </div>
           <div>
             <label className="block text-sm font-medium text-heading mb-1.5">Time</label>
@@ -144,6 +185,7 @@ const CreateMeetingForm = ({ onClose }) => {
               onChange={set('time')}
               className="block w-full rounded-xl border border-border bg-white px-3 py-2.5 text-sm text-heading focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
             />
+            {fieldErrors.startTime && <p className="mt-1 text-xs text-red-600">{fieldErrors.startTime}</p>}
           </div>
           <div>
             <label className="block text-sm font-medium text-heading mb-1.5">Duration (min)</label>
@@ -155,6 +197,7 @@ const CreateMeetingForm = ({ onClose }) => {
               onChange={set('duration')}
               className="block w-full rounded-xl border border-border bg-white px-3 py-2.5 text-sm text-heading focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
             />
+            {fieldErrors.durationMinutes && <p className="mt-1 text-xs text-red-600">{fieldErrors.durationMinutes}</p>}
           </div>
         </div>
 
@@ -167,7 +210,7 @@ const CreateMeetingForm = ({ onClose }) => {
               className="block w-full rounded-xl border border-border bg-white px-3 py-2.5 text-sm text-heading focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
             >
               <option value="">None</option>
-              {PROJECTS.map((p) => (
+              {projects.map((p) => (
                 <option key={p.id} value={p.id}>
                   {p.name}
                 </option>
@@ -204,9 +247,20 @@ const CreateMeetingForm = ({ onClose }) => {
         </div>
 
         <div>
+          <label className="block text-sm font-medium text-heading mb-1.5">Location</label>
+          <input
+            type="text"
+            value={form.location}
+            onChange={set('location')}
+            placeholder="e.g. Zoom · Product Room"
+            className="block w-full rounded-xl border border-border bg-white px-3 py-2.5 text-sm text-heading placeholder:text-gray-400 focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
+          />
+        </div>
+
+        <div>
           <label className="block text-sm font-medium text-heading mb-1.5">Attendees</label>
           <div className="max-h-32 overflow-y-auto dashboard-scrollbar rounded-xl border border-border/60 bg-slate-50/50 p-2 space-y-1">
-            {USERS.slice(0, 12).map((u) => {
+            {users.slice(0, 20).map((u) => {
               const checked = form.attendeeIds.includes(u.id);
               return (
                 <label
@@ -227,10 +281,10 @@ const CreateMeetingForm = ({ onClose }) => {
         </div>
 
         <div>
-          <label className="block text-sm font-medium text-heading mb-1.5">Agenda</label>
+          <label className="block text-sm font-medium text-heading mb-1.5">Description</label>
           <textarea
-            value={form.agenda}
-            onChange={set('agenda')}
+            value={form.description}
+            onChange={set('description')}
             rows={3}
             placeholder="Topics to cover…"
             className="block w-full rounded-xl border border-border bg-white px-3 py-2.5 text-sm text-heading placeholder:text-gray-400 focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary resize-none"
@@ -244,9 +298,10 @@ const CreateMeetingForm = ({ onClose }) => {
           <Button
             type="submit"
             variant="primary"
+            disabled={createMeeting.isPending}
             className="rounded-xl shadow-[0_6px_16px_rgba(37,99,235,0.25)]"
           >
-            Create Meeting
+            {createMeeting.isPending ? 'Creating…' : 'Create Meeting'}
           </Button>
         </div>
       </form>
@@ -254,7 +309,7 @@ const CreateMeetingForm = ({ onClose }) => {
   );
 };
 
-const CreateMeetingModal = ({ open, onClose }) => (
+const CreateMeetingModal = ({ open, onClose, onSuccess }) => (
   <AnimatePresence>
     {open && (
       <div className="fixed inset-0 z-[85] flex items-end sm:items-center justify-center p-0 sm:p-6">
@@ -267,7 +322,7 @@ const CreateMeetingModal = ({ open, onClose }) => (
           exit={{ opacity: 0 }}
           onClick={onClose}
         />
-        <CreateMeetingForm onClose={onClose} />
+        <CreateMeetingForm onClose={onClose} onSuccess={onSuccess} />
       </div>
     )}
   </AnimatePresence>

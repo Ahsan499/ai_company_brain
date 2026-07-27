@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { AnimatePresence, motion } from 'framer-motion';
 import {
@@ -17,8 +17,11 @@ import {
   UserPlus,
   Users2,
   Video,
+  X,
 } from 'lucide-react';
 import Button from '../../components/ui/Button';
+import Skeleton from '../../components/ui/Skeleton';
+import ErrorState from '../../components/ui/ErrorState';
 import EmptyState from '../../components/dashboard/EmptyState';
 import ProjectStatusBadge from '../../components/projects/ProjectStatusBadge';
 import PriorityBadge from '../../components/projects/PriorityBadge';
@@ -29,23 +32,23 @@ import MilestoneList from '../../components/projects/MilestoneList';
 import TaskRow from '../../components/tasks/TaskRow';
 import MeetingRow from '../../components/meetings/MeetingRow';
 import FileRow from '../../components/files/FileRow';
-import {
-  getProjectById,
-  formatProjectDate,
-  daysRemaining,
-} from '../../components/projects/projectData';
-import {
-  getTasksByProject,
-  projectTaskStats,
-} from '../../components/tasks/taskData';
-import { getTeamsByProject } from '../../components/teams/teamData';
-import { getMeetingsByProject } from '../../components/meetings/meetingData';
+import { formatProjectDate, daysRemaining } from '../../components/projects/projectData';
+import { useMeetings } from '../../hooks/useMeetings';
 import {
   formatHours,
   getProjectLoggedMinutes,
 } from '../../components/time-tracking/timeEntryData';
 import { getFilesByProject } from '../../components/files/fileData';
-import { getUserById } from '../../components/users/userData';
+import {
+  useAddProjectMember,
+  useProject,
+  useProjectMembers,
+  useProjectTasks,
+  useProjectTeams,
+  useRemoveProjectMember,
+} from '../../hooks/useProjects';
+import { useUsers } from '../../hooks/useUsers';
+import { getApiErrorMessage } from '../../lib/api';
 
 const TABS = [
   { id: 'overview', label: 'Overview' },
@@ -57,40 +60,142 @@ const TABS = [
   { id: 'settings', label: 'Settings' },
 ];
 
+const AddProjectMemberModal = ({ open, onClose, project, existingMemberIds = [] }) => {
+  const addMember = useAddProjectMember();
+  const firstRef = useRef(null);
+  const [userId, setUserId] = useState('');
+  const [error, setError] = useState('');
+
+  const { data: usersData } = useUsers({
+    organizationId: project?.organizationId || 'all',
+    perPage: 100,
+    page: 1,
+  });
+
+  const candidates = useMemo(() => {
+    const taken = new Set(existingMemberIds.map(String));
+    return (usersData?.data ?? []).filter((user) => !taken.has(String(user.id)));
+  }, [usersData, existingMemberIds]);
+
+  const selectedUserId = userId || (candidates[0] ? String(candidates[0].id) : '');
+
+  useEffect(() => {
+    if (!open) return;
+    const t = window.setTimeout(() => firstRef.current?.focus(), 50);
+    document.body.style.overflow = 'hidden';
+    const onKey = (event) => {
+      if (event.key === 'Escape' && !addMember.isPending) onClose?.();
+    };
+    document.addEventListener('keydown', onKey);
+    return () => {
+      window.clearTimeout(t);
+      document.body.style.overflow = '';
+      document.removeEventListener('keydown', onKey);
+    };
+  }, [open, onClose, addMember.isPending]);
+
+  if (!open) return null;
+
+  const submit = async (event) => {
+    event.preventDefault();
+    if (!project?.id || !selectedUserId) return;
+    setError('');
+    try {
+      await addMember.mutateAsync({ projectId: project.id, userId: Number(selectedUserId) });
+      onClose?.();
+    } catch (apiError) {
+      setError(getApiErrorMessage(apiError, 'Could not add member.'));
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-[85] flex items-end sm:items-center justify-center p-0 sm:p-6">
+      <button
+        type="button"
+        aria-label="Close dialog"
+        className="absolute inset-0 bg-heading/25 backdrop-blur-[6px]"
+        onClick={onClose}
+      />
+      <motion.form
+        onSubmit={submit}
+        initial={{ opacity: 0, y: 20, scale: 0.98 }}
+        animate={{ opacity: 1, y: 0, scale: 1 }}
+        className="relative z-10 w-full sm:max-w-[430px] rounded-t-[24px] sm:rounded-[24px] border border-white/70 bg-white/95 p-5 sm:p-6 shadow-[0_24px_80px_rgba(15,23,42,0.2)] space-y-4"
+      >
+        <div className="flex items-start justify-between gap-3">
+          <h2 className="text-[16px] font-semibold text-heading">Add member</h2>
+          <button
+            type="button"
+            onClick={onClose}
+            className="h-9 w-9 inline-flex items-center justify-center rounded-xl text-secondaryText hover:bg-slate-100"
+            aria-label="Close"
+          >
+            <X size={17} />
+          </button>
+        </div>
+        {error ? (
+          <div role="alert" className="rounded-xl border border-error/20 bg-red-50 px-3.5 py-2.5 text-sm text-error">
+            {error}
+          </div>
+        ) : null}
+        <div>
+          <label className="block text-sm font-medium text-heading mb-1.5">User</label>
+          <select
+            ref={firstRef}
+            value={selectedUserId}
+            onChange={(event) => setUserId(event.target.value)}
+            className="block w-full rounded-xl border border-border bg-white px-3 py-2.5 text-sm text-heading focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
+          >
+            {candidates.length === 0 ? (
+              <option value="">No eligible users</option>
+            ) : (
+              candidates.map((user) => (
+                <option key={user.id} value={user.id}>
+                  {user.name}
+                  {user.role ? ` · ${user.role}` : ''}
+                </option>
+              ))
+            )}
+          </select>
+        </div>
+        <div className="flex justify-end gap-2.5">
+          <Button type="button" variant="secondary" onClick={onClose} className="rounded-xl">
+            Cancel
+          </Button>
+          <Button
+            type="submit"
+            variant="primary"
+            disabled={!selectedUserId || addMember.isPending}
+            className="rounded-xl"
+          >
+            {addMember.isPending ? 'Adding…' : 'Add member'}
+          </Button>
+        </div>
+      </motion.form>
+    </div>
+  );
+};
+
 const ProjectDetail = () => {
   const { id } = useParams();
   const navigate = useNavigate();
-  const project = useMemo(() => getProjectById(id), [id]);
+  const { data: project, isLoading, isError, error, refetch } = useProject(id);
+  const { data: projectTasksData, isLoading: tasksLoading } = useProjectTasks(id);
+  const { data: projectMembersData, isLoading: membersLoading } = useProjectMembers(id);
+  const { data: projectTeamsData } = useProjectTeams(id);
+  const removeProjectMember = useRemoveProjectMember();
   const [tab, setTab] = useState('overview');
-  const [statusOverrides, setStatusOverrides] = useState({});
+  const [addMemberOpen, setAddMemberOpen] = useState(false);
+  const [selectedMemberIds, setSelectedMemberIds] = useState([]);
+  const [memberError, setMemberError] = useState('');
 
-  const baseTasks = useMemo(
-    () => (project ? getTasksByProject(project.id) : []),
-    [project]
-  );
+  const projectTasks = projectTasksData?.data ?? [];
+  const projectMembers = projectMembersData?.data ?? [];
+  const assignedTeams = projectTeamsData?.data ?? [];
+  const taskStats = project?.taskCounts ?? { total: 0, done: 0 };
 
-  const projectTasks = useMemo(
-    () =>
-      baseTasks.map((t) =>
-        statusOverrides[t.id] ? { ...t, status: statusOverrides[t.id] } : t
-      ),
-    [baseTasks, statusOverrides]
-  );
-
-  const taskStats = useMemo(
-    () => (project ? projectTaskStats(project.id) : { total: 0, done: 0 }),
-    [project]
-  );
-
-  const assignedTeams = useMemo(
-    () => (project ? getTeamsByProject(project.id) : []),
-    [project]
-  );
-
-  const projectMeetings = useMemo(
-    () => (project ? getMeetingsByProject(project.id) : []),
-    [project]
-  );
+  const { data: meetingsData } = useMeetings({ projectId: project?.id ?? 'all', perPage: 50 });
+  const projectMeetings = meetingsData?.data ?? [];
 
   const projectFiles = useMemo(
     () => (project ? getFilesByProject(project.id) : []),
@@ -98,13 +203,53 @@ const ProjectDetail = () => {
   );
 
   const remaining = project ? daysRemaining(project.dueDate) : null;
+  const memberIds = projectMembers.map((member) => member.userId ?? member.id);
 
-  const toggleTaskComplete = (taskId) => {
-    const current = projectTasks.find((t) => t.id === taskId);
-    if (!current) return;
-    const next = current.status === 'done' ? 'todo' : 'done';
-    setStatusOverrides((prev) => ({ ...prev, [taskId]: next }));
+  const toggleMemberSelection = (userId) => {
+    setSelectedMemberIds((prev) =>
+      prev.includes(userId) ? prev.filter((idValue) => idValue !== userId) : [...prev, userId]
+    );
   };
+
+  const removeSelectedMembers = async () => {
+    if (!project || selectedMemberIds.length === 0) return;
+    if (!window.confirm(`Remove ${selectedMemberIds.length} member(s) from this project?`)) return;
+    setMemberError('');
+    try {
+      for (const memberId of selectedMemberIds) {
+        await removeProjectMember.mutateAsync({ projectId: project.id, userId: memberId });
+      }
+      setSelectedMemberIds([]);
+    } catch (apiError) {
+      setMemberError(getApiErrorMessage(apiError, 'Could not remove member(s).'));
+    }
+  };
+
+  if (isLoading) {
+    return (
+      <div className="mx-auto max-w-[1600px] space-y-5">
+        <Skeleton className="h-4 w-28" />
+        <Skeleton className="h-44 w-full" rounded="rounded-[24px]" />
+        <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
+          {Array.from({ length: 5 }).map((_, index) => (
+            <Skeleton key={index} className="h-24 w-full" rounded="rounded-[18px]" />
+          ))}
+        </div>
+      </div>
+    );
+  }
+
+  if (isError) {
+    return (
+      <div className="mx-auto max-w-lg py-10">
+        <ErrorState
+          title="Couldn’t load project"
+          message={error?.response?.data?.message || error?.message}
+          onRetry={() => refetch()}
+        />
+      </div>
+    );
+  }
 
   if (!project) {
     return (
@@ -183,7 +328,7 @@ const ProjectDetail = () => {
               <div className="mt-4 flex flex-wrap items-center gap-3">
                 <MemberAvatarStack members={project.members} max={5} size="md" />
                 <span className="text-[12px] text-secondaryText">
-                  {project.members.length} team members
+                  {project.memberCount ?? project.members?.length ?? 0} team members
                 </span>
               </div>
             </div>
@@ -193,6 +338,7 @@ const ProjectDetail = () => {
                 type="button"
                 variant="secondary"
                 className="h-10 rounded-xl gap-2 text-[13px] font-semibold bg-white"
+                onClick={() => setAddMemberOpen(true)}
               >
                 <UserPlus size={15} />
                 Add Member
@@ -232,6 +378,8 @@ const ProjectDetail = () => {
                   ? projectMeetings.length
                   : t.id === 'files'
                     ? projectFiles.length
+                    : t.id === 'team'
+                      ? projectMembers.length
                     : undefined;
           return (
             <button
@@ -315,7 +463,7 @@ const ProjectDetail = () => {
                 <ProjectStatCard
                   icon={Users2}
                   label="Team size"
-                  value={project.members.length}
+                  value={project.memberCount ?? projectMembers.length}
                   tone="from-[#F5F3FF] to-[#DDD6FE] text-violet-600 ring-violet-500/10"
                 />
               </div>
@@ -382,7 +530,13 @@ const ProjectDetail = () => {
           )}
 
           {tab === 'tasks' && (
-            projectTasks.length === 0 ? (
+            tasksLoading ? (
+              <div className="space-y-3">
+                {Array.from({ length: 4 }).map((_, index) => (
+                  <Skeleton key={index} className="h-12 w-full" />
+                ))}
+              </div>
+            ) : projectTasks.length === 0 ? (
               <div className="rounded-[20px] border border-dashed border-border/70 bg-white/60 py-4">
                 <EmptyState
                   icon={CheckSquare}
@@ -440,7 +594,6 @@ const ProjectDetail = () => {
                           task={task}
                           showProject={false}
                           onOpen={(taskId) => navigate(`/dashboard/tasks/${taskId}`)}
-                          onToggleComplete={toggleTaskComplete}
                         />
                       ))}
                     </tbody>
@@ -482,7 +635,7 @@ const ProjectDetail = () => {
                               {t.name}
                             </span>
                             <span className="block text-[12px] text-secondaryText truncate">
-                              {t.departmentName} · {t.memberIds.length} members · Lead {t.leadName}
+                              {t.departmentName} · {t.memberCount ?? t.memberIds?.length ?? 0} members · Lead {t.leadName}
                             </span>
                           </span>
                         </Link>
@@ -500,37 +653,66 @@ const ProjectDetail = () => {
                       Members with roles on this workspace
                     </p>
                   </div>
-                  <span className="rounded-full bg-slate-100 px-2.5 py-0.5 text-[11px] font-semibold text-secondaryText tabular-nums">
-                    {project.members.length}
-                  </span>
+                  <div className="flex items-center gap-2">
+                    <span className="rounded-full bg-slate-100 px-2.5 py-0.5 text-[11px] font-semibold text-secondaryText tabular-nums">
+                      {projectMembers.length}
+                    </span>
+                    {selectedMemberIds.length > 0 && (
+                      <Button
+                        type="button"
+                        variant="secondary"
+                        className="h-8 rounded-lg text-[11.5px] text-error border-error/20 hover:bg-red-50"
+                        disabled={removeProjectMember.isPending}
+                        onClick={removeSelectedMembers}
+                      >
+                        {removeProjectMember.isPending ? 'Removing…' : `Remove (${selectedMemberIds.length})`}
+                      </Button>
+                    )}
+                  </div>
                 </div>
+                {memberError ? (
+                  <div role="alert" className="mx-4 mt-3 rounded-xl border border-error/20 bg-red-50 px-3.5 py-2.5 text-sm text-error">
+                    {memberError}
+                  </div>
+                ) : null}
                 <ul className="divide-y divide-border/35">
-                  {project.members.map((m) => {
-                    const user = getUserById(m.userId);
-                    return (
-                      <li key={m.userId}>
-                        <Link
-                          to={`/dashboard/users/${m.userId}`}
-                          className="flex items-center gap-3 px-4 sm:px-5 py-3.5 hover:bg-slate-50/80 transition-colors"
-                        >
-                          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-primary to-[#1D4ED8] text-white text-[11px] font-semibold ring-2 ring-white shadow-sm">
-                            {m.initials}
-                          </span>
-                          <span className="min-w-0 flex-1">
-                            <span className="block text-[13.5px] font-semibold text-heading truncate">
-                              {m.name}
+                  {membersLoading ? (
+                    <div className="p-4 space-y-2.5">
+                      <Skeleton className="h-11 w-full" />
+                      <Skeleton className="h-11 w-full" />
+                    </div>
+                  ) : (
+                    projectMembers.map((m) => {
+                      const userId = m.userId ?? m.id;
+                      const selected = selectedMemberIds.includes(userId);
+                      return (
+                        <li key={userId}>
+                          <button
+                            type="button"
+                            onClick={() => toggleMemberSelection(userId)}
+                            className={`w-full text-left flex items-center gap-3 px-4 sm:px-5 py-3.5 transition-colors ${
+                              selected ? 'bg-primary/[0.05]' : 'hover:bg-slate-50/80'
+                            }`}
+                          >
+                            <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-primary to-[#1D4ED8] text-white text-[11px] font-semibold ring-2 ring-white shadow-sm">
+                              {m.initials}
                             </span>
-                            <span className="block text-[12px] text-secondaryText truncate">
-                              {user?.email || '—'}
+                            <span className="min-w-0 flex-1">
+                              <span className="block text-[13.5px] font-semibold text-heading truncate">
+                                {m.name}
+                              </span>
+                              <span className="block text-[12px] text-secondaryText truncate">
+                                {m.email || '—'}
+                              </span>
                             </span>
-                          </span>
-                          <span className="rounded-md bg-primary/5 px-2 py-0.5 text-[10.5px] font-semibold text-primary ring-1 ring-primary/10 whitespace-nowrap">
-                            {m.projectRole}
-                          </span>
-                        </Link>
-                      </li>
-                    );
-                  })}
+                            <span className="rounded-md bg-primary/5 px-2 py-0.5 text-[10.5px] font-semibold text-primary ring-1 ring-primary/10 whitespace-nowrap">
+                              {m.projectRole}
+                            </span>
+                          </button>
+                        </li>
+                      );
+                    })
+                  )}
                 </ul>
               </div>
             </div>
@@ -658,6 +840,12 @@ const ProjectDetail = () => {
           )}
         </motion.div>
       </AnimatePresence>
+      <AddProjectMemberModal
+        open={addMemberOpen}
+        onClose={() => setAddMemberOpen(false)}
+        project={project}
+        existingMemberIds={memberIds}
+      />
     </div>
   );
 };

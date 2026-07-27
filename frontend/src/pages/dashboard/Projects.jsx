@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { motion } from 'framer-motion';
 import {
   FolderKanban,
@@ -9,28 +9,65 @@ import {
   Filter,
 } from 'lucide-react';
 import Button from '../../components/ui/Button';
+import Skeleton from '../../components/ui/Skeleton';
+import ErrorState from '../../components/ui/ErrorState';
 import EmptyState from '../../components/dashboard/EmptyState';
 import ProjectCard from '../../components/projects/ProjectCard';
 import ProjectBoardColumn from '../../components/projects/ProjectBoardColumn';
 import CreateProjectModal from '../../components/projects/CreateProjectModal';
 import {
-  PROJECTS,
   PROJECT_STATUSES,
   PROJECT_PRIORITIES,
   PRIORITY_META,
   PROJECT_STATUS_META,
-  filterProjects,
-  groupProjectsByStatus,
 } from '../../components/projects/projectData';
-import { ORGANIZATIONS } from '../../components/organizations/organizationData';
-import { DEPARTMENTS } from '../../components/departments/departmentData';
+import { useProjects } from '../../hooks/useProjects';
+import { useOrganizations } from '../../hooks/useOrganizations';
+import { useDepartments } from '../../hooks/useDepartments';
 
-const PAGE_SIZE = 6;
+const PAGE_SIZE = 9;
 const selectClass =
   'h-10 rounded-xl border border-border/60 bg-white px-3 text-[12.5px] font-medium text-heading focus:outline-none focus:border-primary/40 focus:ring-[3px] focus:ring-primary/12';
 
+const ProjectsSkeleton = ({ view }) => {
+  if (view === 'board') {
+    return (
+      <div className="overflow-x-auto dashboard-scrollbar -mx-1 px-1 pb-2">
+        <div className="flex gap-3 sm:gap-4 min-w-min">
+          {Array.from({ length: 4 }).map((_, i) => (
+            <div
+              key={i}
+              className="w-[280px] sm:w-[300px] rounded-[20px] border border-border/45 bg-white/90 p-3.5 space-y-2.5"
+            >
+              <Skeleton className="h-5 w-28" rounded="rounded-full" />
+              <Skeleton className="h-[120px] w-full" rounded="rounded-[14px]" />
+              <Skeleton className="h-[120px] w-full" rounded="rounded-[14px]" />
+            </div>
+          ))}
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3.5 sm:gap-4">
+      {Array.from({ length: 6 }).map((_, i) => (
+        <Skeleton key={i} className="h-[200px] w-full" rounded="rounded-[20px]" />
+      ))}
+    </div>
+  );
+};
+
+const groupProjectsByStatus = (list) =>
+  PROJECT_STATUSES.map((statusKey) => ({
+    status: statusKey,
+    meta: PROJECT_STATUS_META[statusKey],
+    items: list.filter((project) => project.status === statusKey),
+  }));
+
 const Projects = () => {
   const [query, setQuery] = useState('');
+  const [debouncedQuery, setDebouncedQuery] = useState('');
   const [organizationId, setOrganizationId] = useState('all');
   const [departmentId, setDepartmentId] = useState('all');
   const [status, setStatus] = useState('all');
@@ -38,30 +75,40 @@ const Projects = () => {
   const [view, setView] = useState('grid');
   const [page, setPage] = useState(1);
   const [createOpen, setCreateOpen] = useState(false);
+  const [successMsg, setSuccessMsg] = useState('');
 
-  const deptOptions = useMemo(() => {
-    if (organizationId === 'all') return DEPARTMENTS;
-    return DEPARTMENTS.filter((d) => d.organizationId === organizationId);
-  }, [organizationId]);
+  useEffect(() => {
+    const t = window.setTimeout(() => setDebouncedQuery(query.trim()), 300);
+    return () => window.clearTimeout(t);
+  }, [query]);
 
-  const filtered = useMemo(
-    () =>
-      filterProjects(PROJECTS, {
-        query,
-        organizationId,
-        departmentId,
-        status,
-        priority,
-      }),
-    [query, organizationId, departmentId, status, priority]
-  );
+  const { data, isLoading, isFetching, isError, error, refetch } = useProjects({
+    search: debouncedQuery,
+    organizationId,
+    departmentId,
+    status,
+    priority,
+    page,
+    perPage: PAGE_SIZE,
+  });
 
-  const pageItems = filtered.slice(0, page * PAGE_SIZE);
-  const hasMore = pageItems.length < filtered.length;
-  const boardColumns = useMemo(() => groupProjectsByStatus(filtered), [filtered]);
+  const { data: orgsData } = useOrganizations({ perPage: 100, page: 1 });
+  const { data: deptsData } = useDepartments({
+    organizationId,
+    perPage: 100,
+    page: 1,
+  });
+
+  const projects = data?.data ?? [];
+  const meta = data?.meta ?? { currentPage: 1, lastPage: 1, total: 0 };
+  const organizations = orgsData?.data ?? [];
+  const deptOptions = deptsData?.data ?? [];
+  const boardColumns = useMemo(() => groupProjectsByStatus(projects), [projects]);
+  const showEmpty = !isLoading && !isError && projects.length === 0;
 
   const resetFilters = () => {
     setQuery('');
+    setDebouncedQuery('');
     setOrganizationId('all');
     setDepartmentId('all');
     setStatus('all');
@@ -83,7 +130,7 @@ const Projects = () => {
               <FolderKanban size={17} strokeWidth={2} />
             </span>
             <span className="rounded-full bg-primary/10 px-2.5 py-0.5 text-[11px] font-semibold text-primary ring-1 ring-primary/12">
-              {PROJECTS.length} projects
+              {meta.total ?? '—'} projects
             </span>
           </div>
           <h1 className="text-[26px] sm:text-[30px] font-bold text-heading tracking-tight leading-tight">
@@ -104,6 +151,15 @@ const Projects = () => {
           New Project
         </Button>
       </motion.section>
+
+      {successMsg ? (
+        <div
+          role="status"
+          className="flex items-center gap-2 rounded-xl border border-emerald-500/20 bg-emerald-50 px-3.5 py-2.5 text-[13px] font-medium text-emerald-800"
+        >
+          {successMsg}
+        </div>
+      ) : null}
 
       <motion.div
         initial={{ opacity: 0, y: 10 }}
@@ -185,7 +241,7 @@ const Projects = () => {
             className={`${selectClass} max-w-[200px]`}
           >
             <option value="all">All organizations</option>
-            {ORGANIZATIONS.map((o) => (
+            {organizations.map((o) => (
               <option key={o.id} value={o.id}>
                 {o.name}
               </option>
@@ -239,7 +295,15 @@ const Projects = () => {
         </div>
       </motion.div>
 
-      {filtered.length === 0 ? (
+      {isError ? (
+        <ErrorState
+          title="Couldn’t load projects"
+          message={error?.response?.data?.message || error?.message || 'Please try again.'}
+          onRetry={() => refetch()}
+        />
+      ) : isLoading ? (
+        <ProjectsSkeleton view={view} />
+      ) : showEmpty ? (
         <div className="rounded-[20px] border border-border/45 bg-white/85 py-6 shadow-sm">
           <EmptyState
             icon={FolderKanban}
@@ -254,7 +318,7 @@ const Projects = () => {
         </div>
       ) : view === 'board' ? (
         <div className="overflow-x-auto dashboard-scrollbar -mx-1 px-1 pb-2">
-          <div className="flex gap-3 sm:gap-4 min-w-min">
+          <div className={`flex gap-3 sm:gap-4 min-w-min ${isFetching ? 'opacity-80' : ''}`}>
             {boardColumns.map((col, i) => (
               <ProjectBoardColumn
                 key={col.status}
@@ -268,34 +332,57 @@ const Projects = () => {
         </div>
       ) : (
         <>
-          <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3.5 sm:gap-4">
-            {pageItems.map((p, i) => (
+          <div className={`grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3.5 sm:gap-4 ${isFetching ? 'opacity-80' : ''}`}>
+            {projects.map((p, i) => (
               <ProjectCard key={p.id} project={p} index={i} />
             ))}
-          </div>
-          <div className="flex flex-col sm:flex-row items-center justify-between gap-3">
-            <p className="text-[12.5px] text-secondaryText">
-              Showing{' '}
-              <span className="font-semibold text-heading tabular-nums">{pageItems.length}</span>
-              {' '}of{' '}
-              <span className="font-semibold text-heading tabular-nums">{filtered.length}</span>
-              {' '}projects
-            </p>
-            {hasMore && (
-              <Button
-                type="button"
-                variant="secondary"
-                onClick={() => setPage((p) => p + 1)}
-                className="rounded-xl h-10 text-[13px] font-semibold bg-white/90"
-              >
-                Load more
-              </Button>
-            )}
           </div>
         </>
       )}
 
-      <CreateProjectModal open={createOpen} onClose={() => setCreateOpen(false)} />
+      {!isLoading && !isError && projects.length > 0 && (
+        <div className="flex flex-col sm:flex-row items-center justify-between gap-3">
+          <p className="text-[12.5px] text-secondaryText">
+            Page{' '}
+            <span className="font-semibold text-heading tabular-nums">{meta.currentPage}</span>
+            {' '}of{' '}
+            <span className="font-semibold text-heading tabular-nums">{meta.lastPage}</span>
+            {' · '}
+            <span className="font-semibold text-heading tabular-nums">{meta.total}</span>
+            {' '}projects
+          </p>
+          <div className="flex items-center gap-2">
+            <Button
+              type="button"
+              variant="secondary"
+              disabled={meta.currentPage <= 1}
+              onClick={() => setPage((p) => Math.max(1, p - 1))}
+              className="rounded-xl h-10 text-[13px] font-semibold bg-white/90 disabled:opacity-40"
+            >
+              Previous
+            </Button>
+            <Button
+              type="button"
+              variant="secondary"
+              disabled={meta.currentPage >= meta.lastPage}
+              onClick={() => setPage((p) => p + 1)}
+              className="rounded-xl h-10 text-[13px] font-semibold bg-white/90 disabled:opacity-40"
+            >
+              Next
+            </Button>
+          </div>
+        </div>
+      )}
+
+      <CreateProjectModal
+        open={createOpen}
+        onClose={() => setCreateOpen(false)}
+        onCreated={(project) => {
+          setSuccessMsg(`“${project?.name || 'Project'}” created successfully.`);
+          setPage(1);
+          window.setTimeout(() => setSuccessMsg(''), 4000);
+        }}
+      />
     </div>
   );
 };

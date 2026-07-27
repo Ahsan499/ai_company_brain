@@ -38,13 +38,16 @@ import {
 } from '../../components/teams/teamData';
 import MeetingRow from '../../components/meetings/MeetingRow';
 import {
-  getMeetingsByUser,
   REFERENCE_TODAY,
 } from '../../components/meetings/meetingData';
 import {
   formatHours,
-  getUserWeekMinutes,
+  getWeekDates,
+  getWeekStart,
+  sumMinutes,
 } from '../../components/time-tracking/timeEntryData';
+import { useMeetings } from '../../hooks/useMeetings';
+import { useTimeEntries } from '../../hooks/useTimeTracking';
 import {
   formatFileDate,
   getFilesByUploader,
@@ -53,8 +56,8 @@ import {
   useUpdateUser,
   useUser,
   useUserProjects,
-  useUserTasks,
 } from '../../hooks/useUsers';
+import { useTasks, useUpdateTaskStatus } from '../../hooks/useTasks';
 import { getApiErrorMessage } from '../../lib/api';
 
 const TABS = [
@@ -84,11 +87,15 @@ const UserDetail = () => {
   const { id } = useParams();
   const navigate = useNavigate();
   const { data: user, isLoading, isError, error, refetch } = useUser(id);
-  const { data: tasksData, isLoading: tasksLoading } = useUserTasks(id);
+  const { data: tasksData, isLoading: tasksLoading } = useTasks({
+    assigneeId: id,
+    perPage: 100,
+    page: 1,
+  });
   const { data: projectsData, isLoading: projectsLoading } = useUserProjects(id);
   const updateUser = useUpdateUser();
+  const updateTaskStatus = useUpdateTaskStatus();
   const [tab, setTab] = useState('overview');
-  const [statusOverrides, setStatusOverrides] = useState({});
   const [actionError, setActionError] = useState('');
   const [actionMsg, setActionMsg] = useState('');
 
@@ -105,9 +112,28 @@ const UserDetail = () => {
     [user]
   );
 
+  const { data: userMeetingsData } = useMeetings({
+    organizerId: user?.id ?? 'all',
+    myMeetings: true,
+    perPage: 20,
+  });
+
+  const today = new Date().toISOString().slice(0, 10);
+  const weekStart = getWeekStart(today);
+  const weekDates = useMemo(() => getWeekDates(weekStart), [weekStart]);
+
+  const { data: weekTimeData } = useTimeEntries({
+    userId: user?.id,
+    dateFrom: weekDates[0],
+    dateTo: weekDates[6],
+    perPage: 500,
+  });
+
+  const weekMinutes = useMemo(() => sumMinutes(weekTimeData?.data ?? []), [weekTimeData]);
+
   const upcomingMeetings = useMemo(() => {
-    if (!user) return [];
-    return getMeetingsByUser(user.id)
+    const all = userMeetingsData?.data ?? [];
+    return all
       .filter(
         (m) =>
           m.status !== 'cancelled' &&
@@ -116,7 +142,7 @@ const UserDetail = () => {
       )
       .sort((a, b) => `${a.date}${a.startTime}`.localeCompare(`${b.date}${b.startTime}`))
       .slice(0, 5);
-  }, [user]);
+  }, [userMeetingsData]);
 
   const recentUploads = useMemo(() => {
     if (!user) return [];
@@ -125,15 +151,7 @@ const UserDetail = () => {
       .slice(0, 5);
   }, [user]);
 
-  const baseTasks = tasksData?.data ?? [];
-
-  const userTasks = useMemo(
-    () =>
-      baseTasks.map((t) =>
-        statusOverrides[t.id] ? { ...t, status: statusOverrides[t.id] } : t
-      ),
-    [baseTasks, statusOverrides]
-  );
+  const userTasks = tasksData?.data ?? [];
 
   const departmentLabel =
     user?.departmentName ||
@@ -144,7 +162,7 @@ const UserDetail = () => {
     const current = userTasks.find((t) => t.id === taskId);
     if (!current) return;
     const next = current.status === 'done' ? 'todo' : 'done';
-    setStatusOverrides((prev) => ({ ...prev, [taskId]: next }));
+    updateTaskStatus.mutate({ id: taskId, status: next });
   };
 
   const handleDeactivate = async () => {
@@ -393,7 +411,7 @@ const UserDetail = () => {
                   value={
                     user.hoursThisWeek != null
                       ? `${user.hoursThisWeek}h`
-                      : formatHours(getUserWeekMinutes(user.id))
+                      : formatHours(weekMinutes)
                   }
                   tone="from-[#EEF2FF] to-[#C7D2FE] text-indigo-700 ring-indigo-500/10"
                 />

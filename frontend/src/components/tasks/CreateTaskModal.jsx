@@ -3,44 +3,53 @@ import { AnimatePresence, motion } from 'framer-motion';
 import { CheckSquare, X } from 'lucide-react';
 import Button from '../ui/Button';
 import Input from '../ui/Input';
-import { PROJECTS, PROJECT_PRIORITIES, PRIORITY_META } from '../projects/projectData';
-import { USERS } from '../users/userData';
+import { PROJECT_PRIORITIES, PRIORITY_META } from '../projects/projectData';
+import { useProjects } from '../../hooks/useProjects';
+import { useUsers } from '../../hooks/useUsers';
+import { useCreateTask } from '../../hooks/useTasks';
+import { getApiErrorMessage, getApiFieldErrors } from '../../lib/api';
 
 const INITIAL = {
   title: '',
-  projectId: PROJECTS[0]?.id || '',
+  projectId: '',
   assigneeId: '',
   priority: 'medium',
   dueDate: '',
   description: '',
 };
 
-const CreateTaskForm = ({ onClose }) => {
+const CreateTaskForm = ({ onClose, onCreated }) => {
   const titleId = useId();
   const firstRef = useRef(null);
-  const [form, setForm] = useState(() => ({
-    ...INITIAL,
-    assigneeId:
-      USERS.find((u) => u.organizationId === PROJECTS[0]?.organizationId)?.id ||
-      USERS[0]?.id ||
-      '',
-  }));
+  const createTask = useCreateTask();
+  const [formError, setFormError] = useState('');
+  const [fieldErrors, setFieldErrors] = useState({});
+  const [form, setForm] = useState(INITIAL);
+  const { data: projectsData } = useProjects({ perPage: 100, page: 1 });
+  const projects = projectsData?.data ?? [];
+  const selectedProjectId = form.projectId || (projects[0]?.id ? String(projects[0].id) : '');
 
   const project = useMemo(
-    () => PROJECTS.find((p) => p.id === form.projectId),
-    [form.projectId]
+    () => projects.find((p) => String(p.id) === String(selectedProjectId)),
+    [projects, selectedProjectId]
   );
 
+  const { data: usersData } = useUsers({
+    organizationId: project?.organizationId || 'all',
+    perPage: 100,
+    page: 1,
+  });
+
   const assignees = useMemo(() => {
-    if (!project) return USERS.slice(0, 12);
-    return USERS.filter((u) => u.organizationId === project.organizationId);
-  }, [project]);
+    return usersData?.data ?? [];
+  }, [usersData]);
+  const selectedAssigneeId = form.assigneeId || (assignees[0]?.id ? String(assignees[0].id) : '');
 
   useEffect(() => {
     const t = window.setTimeout(() => firstRef.current?.focus(), 50);
     document.body.style.overflow = 'hidden';
     const onKey = (e) => {
-      if (e.key === 'Escape') onClose?.();
+      if (e.key === 'Escape' && !createTask.isPending) onClose?.();
     };
     document.addEventListener('keydown', onKey);
     return () => {
@@ -48,25 +57,47 @@ const CreateTaskForm = ({ onClose }) => {
       document.body.style.overflow = '';
       document.removeEventListener('keydown', onKey);
     };
-  }, [onClose]);
+  }, [onClose, createTask.isPending]);
 
   const set = (key) => (e) => {
     const value = e.target.value;
     setForm((prev) => {
       if (key === 'projectId') {
-        const nextProject = PROJECTS.find((p) => p.id === value);
-        const nextAssignee =
-          USERS.find((u) => u.organizationId === nextProject?.organizationId)?.id ||
-          prev.assigneeId;
-        return { ...prev, projectId: value, assigneeId: nextAssignee };
+        return { ...prev, projectId: value, assigneeId: '' };
       }
       return { ...prev, [key]: value };
     });
+    setFieldErrors((prev) => {
+      if (!prev[key]) return prev;
+      const next = { ...prev };
+      delete next[key];
+      return next;
+    });
   };
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
-    onClose?.();
+    if (!project) return;
+    setFieldErrors({});
+    setFormError('');
+    try {
+      const created = await createTask.mutateAsync({
+        title: form.title,
+        projectId: Number(selectedProjectId),
+        assigneeId: selectedAssigneeId ? Number(selectedAssigneeId) : null,
+        priority: form.priority,
+        dueDate: form.dueDate || null,
+        description: form.description || null,
+        status: 'todo',
+        organizationId: Number(project.organizationId),
+        departmentId: Number(project.departmentId),
+      });
+      onCreated?.(created);
+      onClose?.();
+    } catch (error) {
+      setFieldErrors(getApiFieldErrors(error));
+      setFormError(getApiErrorMessage(error, 'Could not create task.'));
+    }
   };
 
   return (
@@ -108,6 +139,7 @@ const CreateTaskForm = ({ onClose }) => {
         <button
           type="button"
           onClick={onClose}
+          disabled={createTask.isPending}
           className="h-9 w-9 inline-flex items-center justify-center rounded-xl text-secondaryText hover:bg-slate-100 hover:text-heading"
           aria-label="Close"
         >
@@ -116,6 +148,11 @@ const CreateTaskForm = ({ onClose }) => {
       </div>
 
       <form onSubmit={handleSubmit} className="space-y-4">
+        {formError ? (
+          <div role="alert" className="rounded-xl border border-error/20 bg-red-50 px-3.5 py-2.5 text-sm text-error">
+            {formError}
+          </div>
+        ) : null}
         <Input
           ref={firstRef}
           label="Title"
@@ -123,30 +160,40 @@ const CreateTaskForm = ({ onClose }) => {
           value={form.title}
           onChange={set('title')}
           required
+          error={fieldErrors.title}
           className="rounded-xl"
         />
         <div>
           <label className="block text-sm font-medium text-heading mb-1.5">Project</label>
           <select
-            value={form.projectId}
+            value={selectedProjectId}
             onChange={set('projectId')}
+            required
             className="block w-full rounded-xl border border-border bg-white px-3 py-2.5 text-sm text-heading focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
           >
-            {PROJECTS.map((p) => (
-              <option key={p.id} value={p.id}>
-                {p.name}
-              </option>
-            ))}
+            {projects.length === 0 ? (
+              <option value="">Loading…</option>
+            ) : (
+              projects.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.name}
+                </option>
+              ))
+            )}
           </select>
+          {(fieldErrors.projectId || fieldErrors.project_id) ? (
+            <p className="mt-1 text-[12px] text-error">{fieldErrors.projectId || fieldErrors.project_id}</p>
+          ) : null}
         </div>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
           <div>
             <label className="block text-sm font-medium text-heading mb-1.5">Assignee</label>
             <select
-              value={form.assigneeId}
+              value={selectedAssigneeId}
               onChange={set('assigneeId')}
               className="block w-full rounded-xl border border-border bg-white px-3 py-2.5 text-sm text-heading focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
             >
+              <option value="">Unassigned</option>
               {assignees.map((u) => (
                 <option key={u.id} value={u.id}>
                   {u.name}
@@ -195,9 +242,10 @@ const CreateTaskForm = ({ onClose }) => {
           <Button
             type="submit"
             variant="primary"
+            disabled={createTask.isPending}
             className="rounded-xl shadow-[0_6px_16px_rgba(37,99,235,0.25)]"
           >
-            Create Task
+            {createTask.isPending ? 'Creating…' : 'Create Task'}
           </Button>
         </div>
       </form>
@@ -205,7 +253,7 @@ const CreateTaskForm = ({ onClose }) => {
   );
 };
 
-const CreateTaskModal = ({ open, onClose }) => (
+const CreateTaskModal = ({ open, onClose, onCreated }) => (
   <AnimatePresence>
     {open && (
       <div className="fixed inset-0 z-[85] flex items-end sm:items-center justify-center p-0 sm:p-6">
@@ -218,7 +266,7 @@ const CreateTaskModal = ({ open, onClose }) => (
           exit={{ opacity: 0 }}
           onClick={onClose}
         />
-        <CreateTaskForm onClose={onClose} />
+        <CreateTaskForm onClose={onClose} onCreated={onCreated} />
       </div>
     )}
   </AnimatePresence>

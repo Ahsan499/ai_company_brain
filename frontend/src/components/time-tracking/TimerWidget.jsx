@@ -2,8 +2,8 @@ import { useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
 import { Pause, Play, Timer } from 'lucide-react';
 import Button from '../ui/Button';
-import { TASKS } from '../tasks/taskData';
-import { CURRENT_USER_ID } from './timeEntryData';
+import { useTasks } from '../../hooks/useTasks';
+import { useAuth } from '../../context/AuthContext';
 
 const formatElapsed = (seconds) => {
   const h = Math.floor(seconds / 3600);
@@ -12,12 +12,22 @@ const formatElapsed = (seconds) => {
   return [h, m, s].map((n) => String(n).padStart(2, '0')).join(':');
 };
 
-const TimerWidget = ({ tasks = TASKS, defaultUserId = CURRENT_USER_ID }) => {
-  const myTasks = tasks.filter((t) => t.assigneeId === defaultUserId);
-  const options = myTasks.length ? myTasks : tasks.slice(0, 12);
-  const [taskId, setTaskId] = useState(options[0]?.id || '');
+const TimerWidget = ({ onStop }) => {
+  const { user } = useAuth();
+  const { data: tasksData } = useTasks({ assigneeId: user?.id, perPage: 50 });
+  const allTasks = tasksData?.data ?? [];
+  const options = allTasks.length ? allTasks : [];
+
+  const [taskId, setTaskId] = useState('');
   const [running, setRunning] = useState(false);
   const [elapsed, setElapsed] = useState(0);
+
+  // Set default task once loaded
+  useEffect(() => {
+    if (!taskId && options.length > 0) {
+      setTaskId(String(options[0].id));
+    }
+  }, [options, taskId]);
 
   useEffect(() => {
     if (!running) return undefined;
@@ -25,7 +35,18 @@ const TimerWidget = ({ tasks = TASKS, defaultUserId = CURRENT_USER_ID }) => {
     return () => window.clearInterval(id);
   }, [running]);
 
-  const selected = options.find((t) => t.id === taskId);
+  const selected = options.find((t) => String(t.id) === String(taskId));
+
+  const handleToggle = () => {
+    if (running) {
+      setRunning(false);
+      const elapsedMinutes = Math.max(1, Math.round(elapsed / 60));
+      onStop?.(elapsedMinutes);
+      setElapsed(0);
+    } else {
+      setRunning(true);
+    }
+  };
 
   return (
     <motion.div
@@ -74,6 +95,7 @@ const TimerWidget = ({ tasks = TASKS, defaultUserId = CURRENT_USER_ID }) => {
             "
             aria-label="Task to track"
           >
+            {options.length === 0 && <option value="">Loading tasks…</option>}
             {options.map((t) => (
               <option key={t.id} value={t.id}>
                 {t.title}
@@ -84,10 +106,7 @@ const TimerWidget = ({ tasks = TASKS, defaultUserId = CURRENT_USER_ID }) => {
           <Button
             type="button"
             variant={running ? 'secondary' : 'primary'}
-            onClick={() => {
-              if (running) setRunning(false);
-              else setRunning(true);
-            }}
+            onClick={handleToggle}
             className={`
               h-11 rounded-xl gap-2 text-[13px] font-semibold min-w-[128px]
               ${running ? 'bg-white border-primary/20 text-primary' : 'shadow-[0_6px_16px_rgba(37,99,235,0.28)]'}

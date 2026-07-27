@@ -3,43 +3,64 @@ import { Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { BarChart3, Clock, Plus, Timer } from 'lucide-react';
 import Button from '../../components/ui/Button';
+import Skeleton from '../../components/ui/Skeleton';
+import ErrorState from '../../components/ui/ErrorState';
 import EmptyState from '../../components/dashboard/EmptyState';
 import TimerWidget from '../../components/time-tracking/TimerWidget';
 import TimesheetGrid from '../../components/time-tracking/TimesheetGrid';
 import TimeEntryRow from '../../components/time-tracking/TimeEntryRow';
 import AddTimeEntryModal from '../../components/time-tracking/AddTimeEntryModal';
+import { useTimeEntries, useDeleteTimeEntry } from '../../hooks/useTimeTracking';
+import { useAuth } from '../../context/AuthContext';
 import {
-  CURRENT_USER_ID,
-  REFERENCE_TODAY,
-  TIME_ENTRIES,
-  buildTimesheetRows,
   formatHours,
   getWeekDates,
   getWeekStart,
   sumMinutes,
+  buildTimesheetRows,
 } from '../../components/time-tracking/timeEntryData';
 
+const today = new Date().toISOString().slice(0, 10);
+
+const TimeTrackingSkeleton = () => (
+  <div className="space-y-3">
+    <Skeleton className="h-28 rounded-[20px]" />
+    <Skeleton className="h-64 rounded-[20px]" />
+    <Skeleton className="h-20 rounded-[16px]" />
+    <Skeleton className="h-20 rounded-[16px]" />
+  </div>
+);
+
 const TimeTracking = () => {
-  const [entries, setEntries] = useState(TIME_ENTRIES);
+  const { user } = useAuth();
   const [modalOpen, setModalOpen] = useState(false);
+  const [editEntry, setEditEntry] = useState(null);
   const [cellOverrides, setCellOverrides] = useState({});
 
-  const weekStart = getWeekStart(REFERENCE_TODAY);
+  const weekStart = getWeekStart(today);
   const weekDates = useMemo(() => getWeekDates(weekStart), [weekStart]);
 
-  const myEntries = useMemo(
-    () =>
-      entries
-        .filter((e) => e.userId === CURRENT_USER_ID)
-        .sort((a, b) => `${b.date}${b.id}`.localeCompare(`${a.date}${a.id}`)),
-    [entries]
-  );
+  const { data, isLoading, isError, error, refetch } = useTimeEntries({
+    userId: user?.id,
+    dateFrom: weekDates[0],
+    dateTo: weekDates[6],
+    perPage: 500,
+  });
 
-  const recent = myEntries.slice(0, 12);
+  // Also fetch recent entries (broader range for "recent" section)
+  const { data: recentData } = useTimeEntries({
+    userId: user?.id,
+    perPage: 12,
+  });
+
+  const deleteEntry = useDeleteTimeEntry();
+
+  const weekEntries = data?.data ?? [];
+  const recentEntries = recentData?.data ?? [];
 
   const baseRows = useMemo(
-    () => buildTimesheetRows(entries, CURRENT_USER_ID, weekDates),
-    [entries, weekDates]
+    () => buildTimesheetRows(weekEntries, user?.id, weekDates),
+    [weekEntries, user?.id, weekDates]
   );
 
   const timesheetRows = useMemo(
@@ -59,17 +80,19 @@ const TimeTracking = () => {
     [baseRows, cellOverrides, weekDates]
   );
 
-  const weekMinutes = useMemo(
-    () => sumMinutes(myEntries.filter((e) => weekDates.includes(e.date))),
-    [myEntries, weekDates]
-  );
+  const weekMinutes = useMemo(() => sumMinutes(weekEntries), [weekEntries]);
 
   const onCellChange = (rowKey, date, minutes) => {
     setCellOverrides((prev) => ({ ...prev, [`${rowKey}:${date}`]: minutes }));
   };
 
-  const onDelete = (id) => {
-    setEntries((prev) => prev.filter((e) => e.id !== id));
+  const onDelete = (entry) => {
+    deleteEntry.mutate({ id: entry.id, taskId: entry.taskId, projectId: entry.projectId });
+  };
+
+  const onEdit = (entry) => {
+    setEditEntry(entry);
+    setModalOpen(true);
   };
 
   return (
@@ -111,7 +134,7 @@ const TimeTracking = () => {
           <Button
             type="button"
             variant="primary"
-            onClick={() => setModalOpen(true)}
+            onClick={() => { setEditEntry(null); setModalOpen(true); }}
             className="h-11 rounded-xl gap-2 text-[13px] font-semibold shadow-[0_6px_16px_rgba(37,99,235,0.28)]"
           >
             <Plus size={16} strokeWidth={2.25} />
@@ -120,77 +143,92 @@ const TimeTracking = () => {
         </div>
       </motion.section>
 
-      <TimerWidget />
+      <TimerWidget onStop={(elapsed) => {
+        setEditEntry({ prefillMinutes: elapsed });
+        setModalOpen(true);
+      }} />
 
-      <section className="space-y-3">
-        <div className="flex items-center justify-between gap-2 px-0.5">
-          <div>
-            <h2 className="text-[15px] font-semibold text-heading tracking-tight">This week</h2>
-            <p className="text-[12px] text-secondaryText">
-              {weekDates[0]} → {weekDates[6]} · editable cells (UI only)
-            </p>
-          </div>
-          <span className="inline-flex items-center gap-1.5 rounded-full bg-slate-100 px-2.5 py-1 text-[11px] font-semibold text-secondaryText">
-            <Clock size={12} />
-            {formatHours(weekMinutes)}
-          </span>
-        </div>
+      {isLoading ? (
+        <TimeTrackingSkeleton />
+      ) : isError ? (
+        <ErrorState error={error} onRetry={refetch} />
+      ) : (
+        <>
+          <section className="space-y-3">
+            <div className="flex items-center justify-between gap-2 px-0.5">
+              <div>
+                <h2 className="text-[15px] font-semibold text-heading tracking-tight">This week</h2>
+                <p className="text-[12px] text-secondaryText">
+                  {weekDates[0]} → {weekDates[6]}
+                </p>
+              </div>
+              <span className="inline-flex items-center gap-1.5 rounded-full bg-slate-100 px-2.5 py-1 text-[11px] font-semibold text-secondaryText">
+                <Clock size={12} />
+                {formatHours(weekMinutes)}
+              </span>
+            </div>
 
-        {timesheetRows.length === 0 ? (
-          <div className="rounded-[20px] border border-border/45 bg-white/85 py-6">
-            <EmptyState
-              icon={Timer}
-              title="No time logged this week"
-              description="Start the timer or add a manual entry to fill your timesheet."
-              action={
-                <Button
-                  type="button"
-                  variant="primary"
-                  className="rounded-xl"
-                  onClick={() => setModalOpen(true)}
-                >
-                  Add Manual Entry
-                </Button>
-              }
-            />
-          </div>
-        ) : (
-          <TimesheetGrid
-            rows={timesheetRows}
-            weekDates={weekDates}
-            onCellChange={onCellChange}
-          />
-        )}
-      </section>
-
-      <section className="space-y-3">
-        <h2 className="text-[15px] font-semibold text-heading tracking-tight px-0.5">
-          Recent entries
-        </h2>
-        {recent.length === 0 ? (
-          <div className="rounded-[20px] border border-dashed border-border/70 bg-white/60 py-4">
-            <EmptyState
-              icon={Clock}
-              title="No entries yet"
-              description="Your logged time will appear here."
-            />
-          </div>
-        ) : (
-          <ul className="space-y-2.5">
-            {recent.map((entry, i) => (
-              <TimeEntryRow
-                key={entry.id}
-                entry={entry}
-                index={i}
-                onEdit={() => setModalOpen(true)}
-                onDelete={onDelete}
+            {timesheetRows.length === 0 ? (
+              <div className="rounded-[20px] border border-border/45 bg-white/85 py-6">
+                <EmptyState
+                  icon={Timer}
+                  title="No time logged this week"
+                  description="Start the timer or add a manual entry to fill your timesheet."
+                  action={
+                    <Button
+                      type="button"
+                      variant="primary"
+                      className="rounded-xl"
+                      onClick={() => { setEditEntry(null); setModalOpen(true); }}
+                    >
+                      Add Manual Entry
+                    </Button>
+                  }
+                />
+              </div>
+            ) : (
+              <TimesheetGrid
+                rows={timesheetRows}
+                weekDates={weekDates}
+                onCellChange={onCellChange}
               />
-            ))}
-          </ul>
-        )}
-      </section>
+            )}
+          </section>
 
-      <AddTimeEntryModal open={modalOpen} onClose={() => setModalOpen(false)} />
+          <section className="space-y-3">
+            <h2 className="text-[15px] font-semibold text-heading tracking-tight px-0.5">
+              Recent entries
+            </h2>
+            {recentEntries.length === 0 ? (
+              <div className="rounded-[20px] border border-dashed border-border/70 bg-white/60 py-4">
+                <EmptyState
+                  icon={Clock}
+                  title="No entries yet"
+                  description="Your logged time will appear here."
+                />
+              </div>
+            ) : (
+              <ul className="space-y-2.5">
+                {recentEntries.map((entry, i) => (
+                  <TimeEntryRow
+                    key={entry.id}
+                    entry={entry}
+                    index={i}
+                    onEdit={() => onEdit(entry)}
+                    onDelete={() => onDelete(entry)}
+                  />
+                ))}
+              </ul>
+            )}
+          </section>
+        </>
+      )}
+
+      <AddTimeEntryModal
+        open={modalOpen}
+        onClose={() => { setModalOpen(false); setEditEntry(null); }}
+        prefill={editEntry}
+      />
     </div>
   );
 };

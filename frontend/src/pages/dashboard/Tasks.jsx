@@ -11,36 +11,79 @@ import {
   UserRound,
 } from 'lucide-react';
 import Button from '../../components/ui/Button';
+import Skeleton from '../../components/ui/Skeleton';
+import ErrorState from '../../components/ui/ErrorState';
 import EmptyState from '../../components/dashboard/EmptyState';
 import TaskRow from '../../components/tasks/TaskRow';
 import TaskBoardColumn from '../../components/tasks/TaskBoardColumn';
 import TaskDetailDrawer from '../../components/tasks/TaskDetailDrawer';
 import CreateTaskModal from '../../components/tasks/CreateTaskModal';
 import {
-  TASKS,
   TASK_STATUSES,
   TASK_STATUS_META,
-  filterTasks,
-  groupTasksByStatus,
-  getTaskById,
 } from '../../components/tasks/taskData';
 import {
-  PROJECTS,
+  PROJECT_STATUS_META,
   PROJECT_PRIORITIES,
   PRIORITY_META,
 } from '../../components/projects/projectData';
-import { USERS } from '../../components/users/userData';
+import { useProjects } from '../../hooks/useProjects';
+import { useTasks, useUpdateTaskStatus } from '../../hooks/useTasks';
+import { useUsers } from '../../hooks/useUsers';
 
 const PAGE_SIZE = 10;
 const selectClass =
   'h-10 rounded-xl border border-border/60 bg-white px-3 text-[12.5px] font-medium text-heading focus:outline-none focus:border-primary/40 focus:ring-[3px] focus:ring-primary/12';
 
+const TasksSkeleton = ({ view }) => {
+  if (view === 'board') {
+    return (
+      <div className="overflow-x-auto dashboard-scrollbar -mx-1 px-1 pb-2">
+        <div className="flex gap-3 sm:gap-4 min-w-min">
+          {Array.from({ length: 4 }).map((_, i) => (
+            <div
+              key={i}
+              className="w-[280px] sm:w-[300px] rounded-[20px] border border-border/45 bg-white/90 p-3.5 space-y-2.5"
+            >
+              <Skeleton className="h-5 w-28" rounded="rounded-full" />
+              <Skeleton className="h-[105px] w-full" rounded="rounded-[14px]" />
+              <Skeleton className="h-[105px] w-full" rounded="rounded-[14px]" />
+            </div>
+          ))}
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="rounded-[20px] border border-border/45 bg-white/90 p-4 space-y-3">
+      {Array.from({ length: 7 }).map((_, i) => (
+        <Skeleton key={i} className="h-12 w-full" />
+      ))}
+    </div>
+  );
+};
+
+const statusMeta = (status) =>
+  TASK_STATUS_META[status] || PROJECT_STATUS_META[status] || {
+    label: status,
+    tone: 'bg-slate-100 text-slate-600 ring-slate-300/50',
+    column: 'from-slate-50 to-white',
+  };
+
+const groupTasksByStatus = (list) =>
+  TASK_STATUSES.map((statusKey) => ({
+    status: statusKey,
+    meta: statusMeta(statusKey),
+    items: list.filter((task) => task.status === statusKey),
+  }));
+
 const Tasks = () => {
   const navigate = useNavigate();
   const { id: routeTaskId } = useParams();
 
-  const [items, setItems] = useState(TASKS);
   const [query, setQuery] = useState('');
+  const [debouncedQuery, setDebouncedQuery] = useState('');
   const [projectId, setProjectId] = useState('all');
   const [assigneeId, setAssigneeId] = useState('all');
   const [status, setStatus] = useState('all');
@@ -51,25 +94,34 @@ const Tasks = () => {
   const [view, setView] = useState('list');
   const [page, setPage] = useState(1);
   const [createOpen, setCreateOpen] = useState(false);
+  const [successMsg, setSuccessMsg] = useState('');
 
-  const filtered = useMemo(
-    () =>
-      filterTasks(items, {
-        query,
-        projectId,
-        assigneeId,
-        status,
-        priority,
-        myTasksOnly,
-        dueAfter,
-        dueBefore,
-      }),
-    [items, query, projectId, assigneeId, status, priority, myTasksOnly, dueAfter, dueBefore]
-  );
+  useEffect(() => {
+    const t = window.setTimeout(() => setDebouncedQuery(query.trim()), 300);
+    return () => window.clearTimeout(t);
+  }, [query]);
 
-  const pageItems = filtered.slice(0, page * PAGE_SIZE);
-  const hasMore = pageItems.length < filtered.length;
-  const boardColumns = useMemo(() => groupTasksByStatus(filtered), [filtered]);
+  const { data, isLoading, isFetching, isError, error, refetch } = useTasks({
+    search: debouncedQuery,
+    projectId,
+    assigneeId,
+    status,
+    priority,
+    dueDateFrom: dueAfter,
+    dueDateTo: dueBefore,
+    myTasks: myTasksOnly,
+    page,
+    perPage: PAGE_SIZE,
+  });
+  const updateTaskStatus = useUpdateTaskStatus();
+  const { data: projectsData } = useProjects({ perPage: 100, page: 1 });
+  const { data: usersData } = useUsers({ perPage: 100, page: 1 });
+
+  const tasks = data?.data ?? [];
+  const meta = data?.meta ?? { currentPage: 1, lastPage: 1, total: 0 };
+  const projects = projectsData?.data ?? [];
+  const users = usersData?.data ?? [];
+  const boardColumns = useMemo(() => groupTasksByStatus(tasks), [tasks]);
 
   const openTask = useCallback(
     (taskId) => {
@@ -82,49 +134,16 @@ const Tasks = () => {
     navigate('/dashboard/tasks');
   }, [navigate]);
 
-  const activeTask = useMemo(() => {
-    if (!routeTaskId) return null;
-    return items.find((t) => t.id === routeTaskId) || getTaskById(routeTaskId);
-  }, [routeTaskId, items]);
-
-  useEffect(() => {
-    if (routeTaskId && !activeTask) {
-      navigate('/dashboard/tasks', { replace: true });
-    }
-  }, [routeTaskId, activeTask, navigate]);
+  const activeTask = routeTaskId ? tasks.find((task) => String(task.id) === String(routeTaskId)) : null;
 
   const toggleComplete = (taskId) => {
-    setItems((prev) =>
-      prev.map((t) =>
-        t.id === taskId
-          ? { ...t, status: t.status === 'done' ? 'todo' : 'done' }
-          : t
-      )
-    );
+    const task = tasks.find((item) => item.id === taskId);
+    if (!task) return;
+    const nextStatus = task.status === 'done' ? 'todo' : 'done';
+    updateTaskStatus.mutate({ id: taskId, status: nextStatus });
   };
 
-  const onStatusChange = (taskId, next) => {
-    setItems((prev) => prev.map((t) => (t.id === taskId ? { ...t, status: next } : t)));
-  };
-
-  const onPriorityChange = (taskId, next) => {
-    setItems((prev) => prev.map((t) => (t.id === taskId ? { ...t, priority: next } : t)));
-  };
-
-  const onToggleSubtask = (taskId, subId) => {
-    setItems((prev) =>
-      prev.map((t) =>
-        t.id === taskId
-          ? {
-              ...t,
-              subtasks: t.subtasks.map((s) =>
-                s.id === subId ? { ...s, done: !s.done } : s
-              ),
-            }
-          : t
-      )
-    );
-  };
+  const onStatusChange = (taskId, next) => updateTaskStatus.mutate({ id: taskId, status: next });
 
   const resetFilters = () => {
     setQuery('');
@@ -135,6 +154,7 @@ const Tasks = () => {
     setDueAfter('');
     setDueBefore('');
     setMyTasksOnly(false);
+    setDebouncedQuery('');
     setPage(1);
   };
 
@@ -152,7 +172,7 @@ const Tasks = () => {
               <CheckSquare size={17} strokeWidth={2} />
             </span>
             <span className="rounded-full bg-primary/10 px-2.5 py-0.5 text-[11px] font-semibold text-primary ring-1 ring-primary/12">
-              {items.length} tasks
+              {meta.total ?? '—'} tasks
             </span>
           </div>
           <h1 className="text-[26px] sm:text-[30px] font-bold text-heading tracking-tight leading-tight">
@@ -173,6 +193,15 @@ const Tasks = () => {
           New Task
         </Button>
       </motion.section>
+
+      {successMsg ? (
+        <div
+          role="status"
+          className="flex items-center gap-2 rounded-xl border border-emerald-500/20 bg-emerald-50 px-3.5 py-2.5 text-[13px] font-medium text-emerald-800"
+        >
+          {successMsg}
+        </div>
+      ) : null}
 
       <motion.div
         initial={{ opacity: 0, y: 10 }}
@@ -273,7 +302,7 @@ const Tasks = () => {
             className={`${selectClass} max-w-[200px]`}
           >
             <option value="all">All projects</option>
-            {PROJECTS.map((p) => (
+            {projects.map((p) => (
               <option key={p.id} value={p.id}>
                 {p.name}
               </option>
@@ -288,7 +317,7 @@ const Tasks = () => {
             className={`${selectClass} max-w-[160px]`}
           >
             <option value="all">All assignees</option>
-            {USERS.map((u) => (
+            {users.map((u) => (
               <option key={u.id} value={u.id}>
                 {u.name}
               </option>
@@ -349,7 +378,15 @@ const Tasks = () => {
         </div>
       </motion.div>
 
-      {filtered.length === 0 ? (
+      {isError ? (
+        <ErrorState
+          title="Couldn’t load tasks"
+          message={error?.response?.data?.message || error?.message || 'Please try again.'}
+          onRetry={() => refetch()}
+        />
+      ) : isLoading ? (
+        <TasksSkeleton view={view} />
+      ) : tasks.length === 0 ? (
         <div className="rounded-[20px] border border-border/45 bg-white/85 py-6 shadow-sm">
           <EmptyState
             icon={CheckSquare}
@@ -364,7 +401,7 @@ const Tasks = () => {
         </div>
       ) : view === 'board' ? (
         <div className="overflow-x-auto dashboard-scrollbar -mx-1 px-1 pb-2">
-          <div className="flex gap-3 sm:gap-4 min-w-min">
+          <div className={`flex gap-3 sm:gap-4 min-w-min ${isFetching ? 'opacity-80' : ''}`}>
             {boardColumns.map((col, i) => (
               <TaskBoardColumn
                 key={col.status}
@@ -381,7 +418,7 @@ const Tasks = () => {
       ) : (
         <>
           <div className="overflow-hidden rounded-[20px] border border-border/45 bg-white/90 shadow-[0_4px_20px_rgba(15,23,42,0.04)]">
-            <div className="overflow-x-auto dashboard-scrollbar">
+            <div className={`overflow-x-auto dashboard-scrollbar ${isFetching ? 'opacity-80' : ''}`}>
               <table className="w-full min-w-[900px] text-left">
                 <thead>
                   <tr className="border-b border-border/50 bg-slate-50/80">
@@ -411,7 +448,7 @@ const Tasks = () => {
                   </tr>
                 </thead>
                 <tbody>
-                  {pageItems.map((task) => (
+                  {tasks.map((task) => (
                     <TaskRow
                       key={task.id}
                       task={task}
@@ -426,36 +463,55 @@ const Tasks = () => {
 
           <div className="flex flex-col sm:flex-row items-center justify-between gap-3">
             <p className="text-[12.5px] text-secondaryText">
-              Showing{' '}
-              <span className="font-semibold text-heading tabular-nums">{pageItems.length}</span>
+              Page{' '}
+              <span className="font-semibold text-heading tabular-nums">{meta.currentPage}</span>
               {' '}of{' '}
-              <span className="font-semibold text-heading tabular-nums">{filtered.length}</span>
+              <span className="font-semibold text-heading tabular-nums">{meta.lastPage}</span>
+              {' · '}
+              <span className="font-semibold text-heading tabular-nums">{meta.total}</span>
               {' '}tasks
             </p>
-            {hasMore && (
+            <div className="flex items-center gap-2">
               <Button
                 type="button"
                 variant="secondary"
-                onClick={() => setPage((p) => p + 1)}
-                className="rounded-xl h-10 text-[13px] font-semibold bg-white/90"
+                disabled={meta.currentPage <= 1}
+                onClick={() => setPage((p) => Math.max(1, p - 1))}
+                className="rounded-xl h-10 text-[13px] font-semibold bg-white/90 disabled:opacity-40"
               >
-                Load more
+                Previous
               </Button>
-            )}
+              <Button
+                type="button"
+                variant="secondary"
+                disabled={meta.currentPage >= meta.lastPage}
+                onClick={() => setPage((p) => p + 1)}
+                className="rounded-xl h-10 text-[13px] font-semibold bg-white/90 disabled:opacity-40"
+              >
+                Next
+              </Button>
+            </div>
           </div>
         </>
       )}
 
       <TaskDetailDrawer
-        open={Boolean(routeTaskId && activeTask)}
+        open={Boolean(routeTaskId)}
+        taskId={routeTaskId}
         task={activeTask}
         onClose={closeTask}
         onStatusChange={onStatusChange}
-        onPriorityChange={onPriorityChange}
-        onToggleSubtask={onToggleSubtask}
       />
 
-      <CreateTaskModal open={createOpen} onClose={() => setCreateOpen(false)} />
+      <CreateTaskModal
+        open={createOpen}
+        onClose={() => setCreateOpen(false)}
+        onCreated={(task) => {
+          setSuccessMsg(`“${task?.title || 'Task'}” created successfully.`);
+          setPage(1);
+          window.setTimeout(() => setSuccessMsg(''), 4000);
+        }}
+      />
     </div>
   );
 };

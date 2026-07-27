@@ -1,7 +1,9 @@
 import { Link } from 'react-router-dom';
 import { RSVP_META } from './meetingData';
 
-const AttendeeList = ({ attendees = [] }) => {
+const RSVP_OPTIONS = ['accepted', 'pending', 'declined'];
+
+const AttendeeList = ({ attendees = [], currentUserId, onRsvpChange }) => {
   if (!attendees.length) {
     return <p className="text-[12.5px] text-secondaryText py-2">No attendees.</p>;
   }
@@ -10,6 +12,8 @@ const AttendeeList = ({ attendees = [] }) => {
     <ul className="space-y-2">
       {attendees.map((a) => {
         const rsvp = RSVP_META[a.rsvpStatus] || RSVP_META.pending;
+        const isOwnRow = currentUserId && String(a.userId) === String(currentUserId);
+
         return (
           <li key={a.userId} className="flex items-center gap-3">
             <Link
@@ -21,11 +25,26 @@ const AttendeeList = ({ attendees = [] }) => {
               </span>
               <span className="text-[13px] font-medium text-heading truncate">{a.name}</span>
             </Link>
-            <span
-              className={`shrink-0 rounded-md px-1.5 py-0.5 text-[10px] font-semibold ring-1 ${rsvp.tone}`}
-            >
-              {rsvp.label}
-            </span>
+
+            {isOwnRow && onRsvpChange ? (
+              <select
+                value={a.rsvpStatus}
+                onChange={(e) => onRsvpChange(a.userId, e.target.value)}
+                className="shrink-0 rounded-md px-1.5 py-0.5 text-[10px] font-semibold ring-1 border-0 bg-white cursor-pointer focus:outline-none focus:ring-2 focus:ring-primary/30"
+              >
+                {RSVP_OPTIONS.map((opt) => (
+                  <option key={opt} value={opt}>
+                    {RSVP_META[opt]?.label ?? opt}
+                  </option>
+                ))}
+              </select>
+            ) : (
+              <span
+                className={`shrink-0 rounded-md px-1.5 py-0.5 text-[10px] font-semibold ring-1 ${rsvp.tone}`}
+              >
+                {rsvp.label}
+              </span>
+            )}
           </li>
         );
       })}

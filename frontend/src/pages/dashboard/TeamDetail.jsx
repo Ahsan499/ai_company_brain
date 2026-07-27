@@ -30,7 +30,7 @@ import TeamLeadBadge from '../../components/teams/TeamLeadBadge';
 import StatusBadge from '../../components/users/StatusBadge';
 import { formatTeamDate } from '../../components/teams/teamData';
 import { TASKS } from '../../components/tasks/taskData';
-import { getMeetingsByTeam } from '../../components/meetings/meetingData';
+import { useMeetings } from '../../hooks/useMeetings';
 import {
   useAddTeamMember,
   useRemoveTeamMember,
@@ -212,10 +212,8 @@ const TeamDetail = () => {
     );
   }, [team, projectIds, memberIds, statusOverrides]);
 
-  const teamMeetings = useMemo(
-    () => (team ? getMeetingsByTeam(team.id) : []),
-    [team]
-  );
+  const { data: meetingsData } = useMeetings({ teamId: team?.id ?? 'all', perPage: 50 });
+  const teamMeetings = meetingsData?.data ?? [];
 
   const activeProjectCount = useMemo(
     () => teamProjects.filter((p) => p.status === 'active').length,

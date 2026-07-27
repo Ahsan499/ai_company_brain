@@ -11,23 +11,24 @@ import {
   UserRound,
 } from 'lucide-react';
 import Button from '../../components/ui/Button';
+import Skeleton from '../../components/ui/Skeleton';
+import ErrorState from '../../components/ui/ErrorState';
 import EmptyState from '../../components/dashboard/EmptyState';
 import TimeReportChart from '../../components/time-tracking/TimeReportChart';
 import UserTimeBreakdownTable from '../../components/time-tracking/UserTimeBreakdownTable';
 import {
-  TIME_ENTRIES,
-  filterTimeEntries,
+  useTimeReportSummary,
+  useTimeReportByProject,
+  useTimeReportByUser,
+} from '../../hooks/useTimeTracking';
+import { useProjects } from '../../hooks/useProjects';
+import { useTeams } from '../../hooks/useTeams';
+import { useUsers } from '../../hooks/useUsers';
+import {
   formatHours,
   formatHoursDecimal,
-  hoursByProject,
-  hoursByUser,
-  minutesToHours,
   resolveDateRange,
-  sumMinutes,
 } from '../../components/time-tracking/timeEntryData';
-import { PROJECTS } from '../../components/projects/projectData';
-import { TEAMS } from '../../components/teams/teamData';
-import { USERS } from '../../components/users/userData';
 
 const selectClass =
   'h-10 rounded-xl border border-border/60 bg-white px-3 text-[12.5px] font-medium text-heading focus:outline-none focus:border-primary/40 focus:ring-[3px] focus:ring-primary/12';
@@ -46,6 +47,20 @@ const StatCard = ({ icon: Icon, label, value, tone }) => (
   </div>
 );
 
+const ReportsSkeleton = () => (
+  <div className="space-y-4">
+    <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+      {Array.from({ length: 4 }, (_, i) => (
+        <Skeleton key={i} className="h-28 rounded-[18px]" />
+      ))}
+    </div>
+    <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
+      <Skeleton className="h-80 rounded-[20px]" />
+      <Skeleton className="h-80 rounded-[20px]" />
+    </div>
+  </div>
+);
+
 const TimeTrackingReports = () => {
   const [preset, setPreset] = useState('this-week');
   const [teamId, setTeamId] = useState('all');
@@ -59,30 +74,66 @@ const TimeTrackingReports = () => {
     [preset, customAfter, customBefore]
   );
 
-  const filtered = useMemo(
-    () =>
-      filterTimeEntries(TIME_ENTRIES, {
-        teamId,
-        projectId,
-        userId,
-        dateAfter: range.after,
-        dateBefore: range.before,
-      }),
-    [teamId, projectId, userId, range]
+  const filterParams = {
+    teamId: teamId !== 'all' ? teamId : undefined,
+    projectId: projectId !== 'all' ? projectId : undefined,
+    userId: userId !== 'all' ? userId : undefined,
+    dateFrom: range.after,
+    dateTo: range.before,
+  };
+
+  const { data: summary, isLoading: summaryLoading, isError: summaryError, error: summaryErr, refetch: refetchSummary } = useTimeReportSummary(filterParams);
+  const { data: byProject, isLoading: byProjectLoading } = useTimeReportByProject(filterParams);
+  const { data: byUser, isLoading: byUserLoading } = useTimeReportByUser(filterParams);
+
+  const { data: projectsData } = useProjects({ perPage: 100 });
+  const { data: teamsData } = useTeams({ perPage: 100 });
+  const { data: usersData } = useUsers({ perPage: 100 });
+
+  const projects = projectsData?.data ?? [];
+  const teams = teamsData?.data ?? [];
+  const users = usersData?.data ?? [];
+
+  const isLoading = summaryLoading || byProjectLoading || byUserLoading;
+
+  // Normalize byProject for chart: { name, hours }
+  const projectChartData = useMemo(() =>
+    (Array.isArray(byProject) ? byProject : []).map((row) => ({
+      name: row.projectName ?? 'Unknown',
+      hours: row.hours ?? 0,
+    })),
+    [byProject]
   );
 
-  const totalMinutes = sumMinutes(filtered);
-  const uniqueDays = new Set(filtered.map((e) => e.date)).size || 1;
-  const avgPerDay = minutesToHours(totalMinutes / uniqueDays, 1);
-  const byProject = hoursByProject(filtered);
-  const byUser = hoursByUser(filtered);
-  const topProject = byProject[0]?.name || '—';
-  const topUser = byUser[0]?.userName || '—';
+  // Normalize byUser for chart: { name, hours }
+  const userChartData = useMemo(() =>
+    (Array.isArray(byUser) ? byUser : []).slice(0, 8).map((row) => ({
+      name: (row.userName ?? 'Unknown').split(' ')[0],
+      hours: row.hours ?? 0,
+    })),
+    [byUser]
+  );
 
-  const memberChartData = byUser.slice(0, 8).map((u) => ({
-    name: u.userName.split(' ')[0],
-    hours: minutesToHours(u.minutes, 1),
-  }));
+  // Normalize byUser for table: { userId, userName, initials, teamName, minutes, billable, nonBillable }
+  const userTableData = useMemo(() =>
+    (Array.isArray(byUser) ? byUser : []).map((row) => ({
+      userId: row.userId,
+      userName: row.userName ?? 'Unknown',
+      initials: row.initials ?? '?',
+      teamName: row.teamName ?? null,
+      minutes: row.durationMinutes ?? 0,
+      billable: row.billableMinutes ?? 0,
+      nonBillable: row.nonBillableMinutes ?? (row.durationMinutes ?? 0) - (row.billableMinutes ?? 0),
+    })),
+    [byUser]
+  );
+
+  const totalMinutes = summary?.totalMinutes ?? 0;
+  const avgPerDay = summary?.avgHoursPerDay ?? 0;
+  const topProjectName = summary?.topProject?.name ?? '—';
+  const topUserName = summary?.topUser?.name ?? '—';
+
+  const isEmpty = !isLoading && totalMinutes === 0;
 
   return (
     <div className="mx-auto max-w-[1600px] space-y-5 sm:space-y-6">
@@ -171,7 +222,7 @@ const TimeTrackingReports = () => {
           className={`${selectClass} max-w-[160px]`}
         >
           <option value="all">All teams</option>
-          {TEAMS.map((t) => (
+          {teams.map((t) => (
             <option key={t.id} value={t.id}>
               {t.name}
             </option>
@@ -183,7 +234,7 @@ const TimeTrackingReports = () => {
           className={`${selectClass} max-w-[200px]`}
         >
           <option value="all">All projects</option>
-          {PROJECTS.map((p) => (
+          {projects.map((p) => (
             <option key={p.id} value={p.id}>
               {p.name}
             </option>
@@ -195,7 +246,7 @@ const TimeTrackingReports = () => {
           className={`${selectClass} max-w-[160px]`}
         >
           <option value="all">All people</option>
-          {USERS.map((u) => (
+          {users.map((u) => (
             <option key={u.id} value={u.id}>
               {u.name}
             </option>
@@ -203,7 +254,11 @@ const TimeTrackingReports = () => {
         </select>
       </motion.div>
 
-      {filtered.length === 0 ? (
+      {isLoading ? (
+        <ReportsSkeleton />
+      ) : summaryError ? (
+        <ErrorState error={summaryErr} onRetry={refetchSummary} />
+      ) : isEmpty ? (
         <div className="rounded-[20px] border border-border/45 bg-white/85 py-6">
           <EmptyState
             icon={BarChart3}
@@ -217,7 +272,7 @@ const TimeTrackingReports = () => {
             <StatCard
               icon={Clock}
               label="Total hours"
-              value={`${formatHoursDecimal(totalMinutes)}h`}
+              value={`${summary?.totalHours?.toFixed(1) ?? '0.0'}h`}
               tone="from-[#EFF6FF] to-[#BFDBFE] text-primary ring-primary/10"
             />
             <StatCard
@@ -229,13 +284,13 @@ const TimeTrackingReports = () => {
             <StatCard
               icon={FolderKanban}
               label="Top project"
-              value={topProject.length > 16 ? `${topProject.slice(0, 14)}…` : topProject}
+              value={topProjectName.length > 16 ? `${topProjectName.slice(0, 14)}…` : topProjectName}
               tone="from-[#EEF2FF] to-[#C7D2FE] text-indigo-700 ring-indigo-500/10"
             />
             <StatCard
               icon={UserRound}
               label="Most logged"
-              value={topUser.split(' ')[0]}
+              value={topUserName.split(' ')[0]}
               tone="from-[#FFFBEB] to-[#FDE68A] text-amber-700 ring-amber-500/10"
             />
           </div>
@@ -244,13 +299,13 @@ const TimeTrackingReports = () => {
             <TimeReportChart
               title="Hours by project"
               subtitle={`${formatHours(totalMinutes)} total`}
-              data={byProject}
+              data={projectChartData}
               delay={0.05}
             />
             <TimeReportChart
               title="Hours by person"
               subtitle="Top contributors"
-              data={memberChartData}
+              data={userChartData}
               layout="horizontal"
               delay={0.1}
             />
@@ -260,7 +315,7 @@ const TimeTrackingReports = () => {
             <h2 className="text-[15px] font-semibold text-heading tracking-tight px-0.5">
               Per-user breakdown
             </h2>
-            <UserTimeBreakdownTable rows={byUser} />
+            <UserTimeBreakdownTable rows={userTableData} />
           </section>
         </>
       )}

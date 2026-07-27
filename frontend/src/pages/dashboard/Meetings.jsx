@@ -11,31 +11,39 @@ import {
   Video,
 } from 'lucide-react';
 import Button from '../../components/ui/Button';
+import Skeleton from '../../components/ui/Skeleton';
+import ErrorState from '../../components/ui/ErrorState';
 import EmptyState from '../../components/dashboard/EmptyState';
 import MeetingRow from '../../components/meetings/MeetingRow';
 import MeetingCalendarGrid from '../../components/meetings/MeetingCalendarGrid';
 import MeetingDetailDrawer from '../../components/meetings/MeetingDetailDrawer';
 import CreateMeetingModal from '../../components/meetings/CreateMeetingModal';
+import { useMeetings } from '../../hooks/useMeetings';
+import { useProjects } from '../../hooks/useProjects';
+import { useTeams } from '../../hooks/useTeams';
+import { useUsers } from '../../hooks/useUsers';
 import {
-  MEETINGS,
-  REFERENCE_TODAY,
-  filterMeetings,
-  getMeetingById,
-  getMeetingsForDate,
+  formatMeetingDate,
   groupMeetingsByBucket,
+  getMeetingsForDate,
+  REFERENCE_TODAY,
 } from '../../components/meetings/meetingData';
-import { PROJECTS } from '../../components/projects/projectData';
-import { TEAMS } from '../../components/teams/teamData';
-import { USERS } from '../../components/users/userData';
 
 const selectClass =
   'h-10 rounded-xl border border-border/60 bg-white px-3 text-[12.5px] font-medium text-heading focus:outline-none focus:border-primary/40 focus:ring-[3px] focus:ring-primary/12';
+
+const MeetingsSkeleton = () => (
+  <div className="space-y-3">
+    {Array.from({ length: 5 }, (_, i) => (
+      <Skeleton key={i} className="h-20 rounded-[16px]" />
+    ))}
+  </div>
+);
 
 const Meetings = () => {
   const navigate = useNavigate();
   const { id: routeMeetingId } = useParams();
 
-  const [items, setItems] = useState(MEETINGS);
   const [query, setQuery] = useState('');
   const [projectId, setProjectId] = useState('all');
   const [teamId, setTeamId] = useState('all');
@@ -47,25 +55,32 @@ const Meetings = () => {
   const [createOpen, setCreateOpen] = useState(false);
   const [monthDate, setMonthDate] = useState(() => new Date(2026, 6, 1));
   const [selectedDate, setSelectedDate] = useState(REFERENCE_TODAY);
+  const [successMsg, setSuccessMsg] = useState('');
 
-  const filtered = useMemo(
-    () =>
-      filterMeetings(items, {
-        query,
-        projectId,
-        teamId,
-        organizerId,
-        myMeetingsOnly,
-        dateAfter,
-        dateBefore,
-      }),
-    [items, query, projectId, teamId, organizerId, myMeetingsOnly, dateAfter, dateBefore]
-  );
+  const { data, isLoading, isError, error, refetch } = useMeetings({
+    search: query,
+    projectId,
+    teamId,
+    organizerId,
+    dateFrom: dateAfter,
+    dateTo: dateBefore,
+    myMeetings: myMeetingsOnly,
+    perPage: 200,
+  });
 
-  const buckets = useMemo(() => groupMeetingsByBucket(filtered), [filtered]);
+  const { data: projectsData } = useProjects({ perPage: 100 });
+  const { data: teamsData } = useTeams({ perPage: 100 });
+  const { data: usersData } = useUsers({ perPage: 100 });
+
+  const projects = projectsData?.data ?? [];
+  const teams = teamsData?.data ?? [];
+  const users = usersData?.data ?? [];
+  const meetings = data?.data ?? [];
+
+  const buckets = useMemo(() => groupMeetingsByBucket(meetings), [meetings]);
   const selectedDayMeetings = useMemo(
-    () => getMeetingsForDate(filtered, selectedDate),
-    [filtered, selectedDate]
+    () => getMeetingsForDate(meetings, selectedDate),
+    [meetings, selectedDate]
   );
 
   const openMeeting = useCallback(
@@ -79,31 +94,12 @@ const Meetings = () => {
     navigate('/dashboard/meetings');
   }, [navigate]);
 
-  const activeMeeting = useMemo(() => {
-    if (!routeMeetingId) return null;
-    return items.find((m) => m.id === routeMeetingId) || getMeetingById(routeMeetingId);
-  }, [routeMeetingId, items]);
-
   useEffect(() => {
-    if (routeMeetingId && !activeMeeting) {
-      navigate('/dashboard/meetings', { replace: true });
+    if (successMsg) {
+      const t = window.setTimeout(() => setSuccessMsg(''), 3000);
+      return () => window.clearTimeout(t);
     }
-  }, [routeMeetingId, activeMeeting, navigate]);
-
-  const onToggleAgenda = (meetingId, agendaId) => {
-    setItems((prev) =>
-      prev.map((m) =>
-        m.id === meetingId
-          ? {
-              ...m,
-              agenda: m.agenda.map((a) =>
-                a.id === agendaId ? { ...a, done: !a.done } : a
-              ),
-            }
-          : m
-      )
-    );
-  };
+  }, [successMsg]);
 
   const resetFilters = () => {
     setQuery('');
@@ -129,7 +125,7 @@ const Meetings = () => {
               <Video size={17} strokeWidth={2} />
             </span>
             <span className="rounded-full bg-primary/10 px-2.5 py-0.5 text-[11px] font-semibold text-primary ring-1 ring-primary/12">
-              {items.length} meetings
+              {data?.meta?.total ?? '—'} meetings
             </span>
           </div>
           <h1 className="text-[26px] sm:text-[30px] font-bold text-heading tracking-tight leading-tight">
@@ -150,6 +146,12 @@ const Meetings = () => {
           New Meeting
         </Button>
       </motion.section>
+
+      {successMsg && (
+        <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-2.5 text-[13px] font-medium text-emerald-700">
+          {successMsg}
+        </div>
+      )}
 
       <motion.div
         initial={{ opacity: 0, y: 10 }}
@@ -241,7 +243,7 @@ const Meetings = () => {
             className={`${selectClass} max-w-[200px]`}
           >
             <option value="all">All projects</option>
-            {PROJECTS.map((p) => (
+            {projects.map((p) => (
               <option key={p.id} value={p.id}>
                 {p.name}
               </option>
@@ -253,7 +255,7 @@ const Meetings = () => {
             className={`${selectClass} max-w-[160px]`}
           >
             <option value="all">All teams</option>
-            {TEAMS.map((t) => (
+            {teams.map((t) => (
               <option key={t.id} value={t.id}>
                 {t.name}
               </option>
@@ -265,7 +267,7 @@ const Meetings = () => {
             className={`${selectClass} max-w-[160px]`}
           >
             <option value="all">All organizers</option>
-            {USERS.map((u) => (
+            {users.map((u) => (
               <option key={u.id} value={u.id}>
                 {u.name}
               </option>
@@ -290,7 +292,11 @@ const Meetings = () => {
         </div>
       </motion.div>
 
-      {filtered.length === 0 ? (
+      {isLoading ? (
+        <MeetingsSkeleton />
+      ) : isError ? (
+        <ErrorState error={error} onRetry={refetch} />
+      ) : meetings.length === 0 ? (
         <div className="rounded-[20px] border border-border/45 bg-white/85 py-6 shadow-sm">
           <EmptyState
             icon={Video}
@@ -307,7 +313,7 @@ const Meetings = () => {
         <div className="space-y-4">
           <div className="hidden md:block">
             <MeetingCalendarGrid
-              meetings={filtered}
+              meetings={meetings}
               monthDate={monthDate}
               onMonthChange={setMonthDate}
               selectedDate={selectedDate}
@@ -320,7 +326,7 @@ const Meetings = () => {
           <div className="rounded-[20px] border border-border/45 bg-white/90 p-3.5 sm:p-4 shadow-sm">
             <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
               <h2 className="text-[14px] font-semibold text-heading">
-                {selectedDate === REFERENCE_TODAY ? 'Today' : selectedDate}
+                {selectedDate === REFERENCE_TODAY ? 'Today' : formatMeetingDate(selectedDate)}
               </h2>
               <input
                 type="date"
@@ -370,13 +376,19 @@ const Meetings = () => {
       )}
 
       <MeetingDetailDrawer
-        open={Boolean(routeMeetingId && activeMeeting)}
-        meeting={activeMeeting}
+        open={Boolean(routeMeetingId)}
+        meetingId={routeMeetingId}
         onClose={closeMeeting}
-        onToggleAgenda={onToggleAgenda}
       />
 
-      <CreateMeetingModal open={createOpen} onClose={() => setCreateOpen(false)} />
+      <CreateMeetingModal
+        open={createOpen}
+        onClose={() => setCreateOpen(false)}
+        onSuccess={() => {
+          setCreateOpen(false);
+          setSuccessMsg('Meeting created successfully.');
+        }}
+      />
     </div>
   );
 };

@@ -3,14 +3,16 @@ import { AnimatePresence, motion } from 'framer-motion';
 import { FolderKanban, X } from 'lucide-react';
 import Button from '../ui/Button';
 import Input from '../ui/Input';
-import { ORGANIZATIONS } from '../organizations/organizationData';
-import { DEPARTMENTS } from '../departments/departmentData';
-import { USERS } from '../users/userData';
 import { PROJECT_PRIORITIES, PRIORITY_META } from './projectData';
+import { useOrganizations } from '../../hooks/useOrganizations';
+import { useDepartments } from '../../hooks/useDepartments';
+import { useUsers } from '../../hooks/useUsers';
+import { useCreateProject } from '../../hooks/useProjects';
+import { getApiErrorMessage, getApiFieldErrors } from '../../lib/api';
 
 const INITIAL = {
   name: '',
-  organizationId: ORGANIZATIONS[0]?.id || '',
+  organizationId: '',
   departmentId: '',
   description: '',
   priority: 'medium',
@@ -18,30 +20,37 @@ const INITIAL = {
   memberIds: [],
 };
 
-const CreateProjectForm = ({ onClose }) => {
+const CreateProjectForm = ({ onClose, onCreated }) => {
   const titleId = useId();
   const firstRef = useRef(null);
-  const [form, setForm] = useState(() => ({
-    ...INITIAL,
-    departmentId:
-      DEPARTMENTS.find((d) => d.organizationId === INITIAL.organizationId)?.id || '',
-  }));
+  const createProject = useCreateProject();
+  const { data: orgsData } = useOrganizations({ perPage: 100, page: 1 });
+  const organizations = orgsData?.data ?? [];
+  const [fieldErrors, setFieldErrors] = useState({});
+  const [formError, setFormError] = useState('');
+  const [form, setForm] = useState(INITIAL);
+  const selectedOrganizationId = form.organizationId || (organizations[0]?.id ? String(organizations[0].id) : '');
 
-  const deptOptions = useMemo(
-    () => DEPARTMENTS.filter((d) => d.organizationId === form.organizationId),
-    [form.organizationId]
-  );
+  const { data: deptsData } = useDepartments({
+    organizationId: selectedOrganizationId || 'all',
+    perPage: 100,
+    page: 1,
+  });
+  const deptOptions = deptsData?.data ?? [];
+  const selectedDepartmentId = form.departmentId || (deptOptions[0]?.id ? String(deptOptions[0].id) : '');
 
-  const memberOptions = useMemo(
-    () => USERS.filter((u) => u.organizationId === form.organizationId).slice(0, 12),
-    [form.organizationId]
-  );
+  const { data: usersData } = useUsers({
+    organizationId: selectedOrganizationId || 'all',
+    perPage: 100,
+    page: 1,
+  });
+  const memberOptions = useMemo(() => (usersData?.data ?? []).slice(0, 25), [usersData]);
 
   useEffect(() => {
     const t = window.setTimeout(() => firstRef.current?.focus(), 50);
     document.body.style.overflow = 'hidden';
     const onKey = (e) => {
-      if (e.key === 'Escape') onClose?.();
+      if (e.key === 'Escape' && !createProject.isPending) onClose?.();
     };
     document.addEventListener('keydown', onKey);
     return () => {
@@ -49,17 +58,21 @@ const CreateProjectForm = ({ onClose }) => {
       document.body.style.overflow = '';
       document.removeEventListener('keydown', onKey);
     };
-  }, [onClose]);
+  }, [onClose, createProject.isPending]);
 
   const set = (key) => (e) => {
     const value = e.target.value;
     setForm((prev) => {
       if (key === 'organizationId') {
-        const firstDept =
-          DEPARTMENTS.find((d) => d.organizationId === value)?.id || '';
-        return { ...prev, organizationId: value, departmentId: firstDept, memberIds: [] };
+        return { ...prev, organizationId: value, departmentId: '', memberIds: [] };
       }
       return { ...prev, [key]: value };
+    });
+    setFieldErrors((prev) => {
+      if (!prev[key]) return prev;
+      const next = { ...prev };
+      delete next[key];
+      return next;
     });
   };
 
@@ -74,7 +87,26 @@ const CreateProjectForm = ({ onClose }) => {
 
   const handleSubmit = (e) => {
     e.preventDefault();
-    onClose?.();
+    setFormError('');
+    setFieldErrors({});
+    createProject
+      .mutateAsync({
+        name: form.name,
+        organizationId: Number(selectedOrganizationId),
+        departmentId: Number(selectedDepartmentId),
+        description: form.description || null,
+        priority: form.priority,
+        dueDate: form.dueDate || null,
+        memberIds: form.memberIds.map(Number).filter(Boolean),
+      })
+      .then((project) => {
+        onCreated?.(project);
+        onClose?.();
+      })
+      .catch((error) => {
+        setFieldErrors(getApiFieldErrors(error));
+        setFormError(getApiErrorMessage(error, 'Could not create project.'));
+      });
   };
 
   return (
@@ -116,6 +148,7 @@ const CreateProjectForm = ({ onClose }) => {
         <button
           type="button"
           onClick={onClose}
+          disabled={createProject.isPending}
           className="h-9 w-9 inline-flex items-center justify-center rounded-xl text-secondaryText hover:bg-slate-100 hover:text-heading transition-colors"
           aria-label="Close"
         >
@@ -124,6 +157,11 @@ const CreateProjectForm = ({ onClose }) => {
       </div>
 
       <form onSubmit={handleSubmit} className="space-y-4">
+        {formError ? (
+          <div role="alert" className="rounded-xl border border-error/20 bg-red-50 px-3.5 py-2.5 text-sm text-error">
+            {formError}
+          </div>
+        ) : null}
         <Input
           ref={firstRef}
           label="Project name"
@@ -131,6 +169,7 @@ const CreateProjectForm = ({ onClose }) => {
           value={form.name}
           onChange={set('name')}
           required
+          error={fieldErrors.name}
           className="rounded-xl"
         />
 
@@ -138,22 +177,31 @@ const CreateProjectForm = ({ onClose }) => {
           <div>
             <label className="block text-sm font-medium text-heading mb-1.5">Organization</label>
             <select
-              value={form.organizationId}
+              value={selectedOrganizationId}
               onChange={set('organizationId')}
+              required
               className="block w-full rounded-xl border border-border bg-white px-3 py-2.5 text-sm text-heading focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
             >
-              {ORGANIZATIONS.map((o) => (
-                <option key={o.id} value={o.id}>
-                  {o.name}
-                </option>
-              ))}
+              {organizations.length === 0 ? (
+                <option value="">Loading…</option>
+              ) : (
+                organizations.map((o) => (
+                  <option key={o.id} value={o.id}>
+                    {o.name}
+                  </option>
+                ))
+              )}
             </select>
+            {(fieldErrors.organizationId || fieldErrors.organization_id) ? (
+              <p className="mt-1 text-[12px] text-error">{fieldErrors.organizationId || fieldErrors.organization_id}</p>
+            ) : null}
           </div>
           <div>
             <label className="block text-sm font-medium text-heading mb-1.5">Department</label>
             <select
-              value={form.departmentId}
+              value={selectedDepartmentId}
               onChange={set('departmentId')}
+              required
               className="block w-full rounded-xl border border-border bg-white px-3 py-2.5 text-sm text-heading focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
             >
               {deptOptions.length === 0 && <option value="">No departments</option>}
@@ -163,6 +211,9 @@ const CreateProjectForm = ({ onClose }) => {
                 </option>
               ))}
             </select>
+            {(fieldErrors.departmentId || fieldErrors.department_id) ? (
+              <p className="mt-1 text-[12px] text-error">{fieldErrors.departmentId || fieldErrors.department_id}</p>
+            ) : null}
           </div>
         </div>
 
@@ -238,9 +289,10 @@ const CreateProjectForm = ({ onClose }) => {
           <Button
             type="submit"
             variant="primary"
+            disabled={createProject.isPending}
             className="rounded-xl shadow-[0_6px_16px_rgba(37,99,235,0.25)]"
           >
-            Create Project
+            {createProject.isPending ? 'Creating…' : 'Create Project'}
           </Button>
         </div>
       </form>
@@ -248,7 +300,7 @@ const CreateProjectForm = ({ onClose }) => {
   );
 };
 
-const CreateProjectModal = ({ open, onClose }) => (
+const CreateProjectModal = ({ open, onClose, onCreated }) => (
   <AnimatePresence>
     {open && (
       <div className="fixed inset-0 z-[85] flex items-end sm:items-center justify-center p-0 sm:p-6">
@@ -261,7 +313,7 @@ const CreateProjectModal = ({ open, onClose }) => (
           exit={{ opacity: 0 }}
           onClick={onClose}
         />
-        <CreateProjectForm onClose={onClose} />
+        <CreateProjectForm onClose={onClose} onCreated={onCreated} />
       </div>
     )}
   </AnimatePresence>
