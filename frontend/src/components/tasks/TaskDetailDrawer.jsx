@@ -28,8 +28,8 @@ import Button from '../ui/Button';
 import Skeleton from '../ui/Skeleton';
 import ErrorState from '../ui/ErrorState';
 import { formatHours } from '../time-tracking/timeEntryData';
-import { getFilesByTask } from '../files/fileData';
 import { useAuth } from '../../context/AuthContext';
+import { useTaskFiles } from '../../hooks/useFiles';
 import {
   useCreateComment,
   useCreateSubtask,
@@ -61,10 +61,8 @@ const TaskDetailDrawer = ({ open, taskId: taskIdProp, task, onClose, onStatusCha
   const [mutationError, setMutationError] = useState('');
 
   const resolvedTask = liveTask || task;
-  const linkedFiles = useMemo(
-    () => (resolvedTask ? getFilesByTask(resolvedTask.id) : []),
-    [resolvedTask]
-  );
+  const { data: taskFilesData } = useTaskFiles(resolvedTask?.id, { perPage: 100 });
+  const linkedFiles = taskFilesData?.data ?? [];
   const comments = commentsData?.data ?? [];
 
   useEffect(() => {

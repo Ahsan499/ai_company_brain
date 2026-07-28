@@ -3,13 +3,19 @@ import { AnimatePresence, motion } from 'framer-motion';
 import { FolderPlus, X } from 'lucide-react';
 import Button from '../ui/Button';
 import Input from '../ui/Input';
-import { FOLDERS } from './fileData';
+import { useFolders } from '../../hooks/useFiles';
+import { getApiErrorMessage, getApiFieldErrors } from '../../lib/api';
 
-const CreateFolderForm = ({ onClose, currentFolderId = null }) => {
+const CreateFolderForm = ({ onClose, onSubmit, currentFolderId = null }) => {
   const titleId = useId();
   const firstRef = useRef(null);
   const [name, setName] = useState('');
   const [parentId, setParentId] = useState(currentFolderId || '');
+  const [error, setError] = useState('');
+  const [fieldErrors, setFieldErrors] = useState({});
+  const [submitting, setSubmitting] = useState(false);
+  const { data: foldersData } = useFolders({ parentId: 'all', perPage: 200 });
+  const folders = foldersData?.data ?? [];
 
   useEffect(() => {
     const t = window.setTimeout(() => firstRef.current?.focus(), 50);
@@ -27,7 +33,24 @@ const CreateFolderForm = ({ onClose, currentFolderId = null }) => {
 
   const handleSubmit = (e) => {
     e.preventDefault();
-    onClose?.();
+    const run = async () => {
+      setError('');
+      setFieldErrors({});
+      setSubmitting(true);
+      try {
+        await onSubmit?.({
+          name: name.trim(),
+          parent_id: parentId || null,
+        });
+        onClose?.();
+      } catch (apiError) {
+        setError(getApiErrorMessage(apiError, 'Could not create folder.'));
+        setFieldErrors(getApiFieldErrors(apiError));
+      } finally {
+        setSubmitting(false);
+      }
+    };
+    run();
   };
 
   return (
@@ -77,6 +100,11 @@ const CreateFolderForm = ({ onClose, currentFolderId = null }) => {
       </div>
 
       <form onSubmit={handleSubmit} className="space-y-4">
+        {error ? (
+          <div role="alert" className="rounded-xl border border-error/20 bg-red-50 px-3 py-2 text-sm text-error">
+            {error}
+          </div>
+        ) : null}
         <Input
           ref={firstRef}
           label="Folder name"
@@ -86,6 +114,7 @@ const CreateFolderForm = ({ onClose, currentFolderId = null }) => {
           required
           className="rounded-xl"
         />
+        {fieldErrors.name ? <p className="text-xs text-error mt-1">{fieldErrors.name}</p> : null}
         <div>
           <label className="block text-sm font-medium text-heading mb-1.5">Parent location</label>
           <select
@@ -94,7 +123,7 @@ const CreateFolderForm = ({ onClose, currentFolderId = null }) => {
             className="block w-full rounded-xl border border-border bg-white px-3 py-2.5 text-sm text-heading focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
           >
             <option value="">Root</option>
-            {FOLDERS.map((f) => (
+            {folders.map((f) => (
               <option key={f.id} value={f.id}>
                 {f.name}
               </option>
@@ -108,9 +137,10 @@ const CreateFolderForm = ({ onClose, currentFolderId = null }) => {
           <Button
             type="submit"
             variant="primary"
+            disabled={submitting || !name.trim()}
             className="rounded-xl shadow-[0_6px_16px_rgba(37,99,235,0.25)]"
           >
-            Create Folder
+            {submitting ? 'Creating...' : 'Create Folder'}
           </Button>
         </div>
       </form>
@@ -118,7 +148,7 @@ const CreateFolderForm = ({ onClose, currentFolderId = null }) => {
   );
 };
 
-const CreateFolderModal = ({ open, onClose, currentFolderId = null }) => (
+const CreateFolderModal = ({ open, onClose, onSubmit, currentFolderId = null }) => (
   <AnimatePresence>
     {open && (
       <div className="fixed inset-0 z-[85] flex items-end sm:items-center justify-center p-0 sm:p-6">
@@ -131,7 +161,7 @@ const CreateFolderModal = ({ open, onClose, currentFolderId = null }) => (
           exit={{ opacity: 0 }}
           onClick={onClose}
         />
-        <CreateFolderForm onClose={onClose} currentFolderId={currentFolderId} />
+        <CreateFolderForm onClose={onClose} onSubmit={onSubmit} currentFolderId={currentFolderId} />
       </div>
     )}
   </AnimatePresence>

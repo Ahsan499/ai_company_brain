@@ -3,15 +3,13 @@ import { AnimatePresence, motion } from 'framer-motion';
 import { Download, ScrollText } from 'lucide-react';
 import Button from '../../components/ui/Button';
 import EmptyState from '../../components/dashboard/EmptyState';
+import ErrorState from '../../components/ui/ErrorState';
+import Skeleton from '../../components/ui/Skeleton';
 import AuditFilterBar from '../../components/audit-logs/AuditFilterBar';
 import AuditLogGroup from '../../components/audit-logs/AuditLogGroup';
-import {
-  AUDIT_LOGS,
-  filterAuditLogs,
-  groupLogsByDate,
-} from '../../components/audit-logs/auditLogData';
-
-const PAGE_SIZE = 20;
+import { groupLogsByDate } from '../../components/audit-logs/auditLogData';
+import { useAuditLogs } from '../../hooks/useAuditLogs';
+import { useUsers } from '../../hooks/useUsers';
 
 const AuditLogs = () => {
   const [query, setQuery] = useState('');
@@ -22,25 +20,21 @@ const AuditLogs = () => {
   const [dateBefore, setDateBefore] = useState('');
   const [mobileFilters, setMobileFilters] = useState(false);
   const [expandedId, setExpandedId] = useState(null);
-  const [visible, setVisible] = useState(PAGE_SIZE);
   const [exportToast, setExportToast] = useState(false);
+  const { data: logsData, isLoading, isError, error, refetch } = useAuditLogs({
+    actorId,
+    actionType: action,
+    entityType: module,
+    dateFrom: dateAfter,
+    dateTo: dateBefore,
+    search: query,
+    perPage: 100,
+  });
+  const { data: usersData } = useUsers({ perPage: 200 });
 
-  const filtered = useMemo(
-    () =>
-      filterAuditLogs(AUDIT_LOGS, {
-        query,
-        action,
-        module,
-        actorId,
-        dateAfter,
-        dateBefore,
-      }),
-    [query, action, module, actorId, dateAfter, dateBefore]
-  );
-
-  const visibleLogs = useMemo(() => filtered.slice(0, visible), [filtered, visible]);
-  const groups = useMemo(() => groupLogsByDate(visibleLogs), [visibleLogs]);
-  const hasMore = visible < filtered.length;
+  const filtered = logsData?.data ?? [];
+  const groups = useMemo(() => groupLogsByDate(filtered), [filtered]);
+  const actors = (usersData?.data ?? []).map((u) => ({ id: u.id, name: u.name }));
 
   const clearFilters = () => {
     setQuery('');
@@ -96,33 +90,28 @@ const AuditLogs = () => {
         query={query}
         onQuery={(v) => {
           setQuery(v);
-          setVisible(PAGE_SIZE);
         }}
         action={action}
         onAction={(v) => {
           setAction(v);
-          setVisible(PAGE_SIZE);
         }}
         module={module}
         onModule={(v) => {
           setModule(v);
-          setVisible(PAGE_SIZE);
         }}
         actorId={actorId}
         onActor={(v) => {
           setActorId(v);
-          setVisible(PAGE_SIZE);
         }}
         dateAfter={dateAfter}
         onDateAfter={(v) => {
           setDateAfter(v);
-          setVisible(PAGE_SIZE);
         }}
         dateBefore={dateBefore}
         onDateBefore={(v) => {
           setDateBefore(v);
-          setVisible(PAGE_SIZE);
         }}
+        actors={actors}
         mobileOpen={mobileFilters}
         onMobileOpen={() => setMobileFilters(true)}
         onMobileClose={() => setMobileFilters(false)}
@@ -132,7 +121,7 @@ const AuditLogs = () => {
       <div className="flex items-center justify-between gap-2 text-[12.5px] text-secondaryText">
         <p>
           Showing{' '}
-          <span className="font-semibold text-heading tabular-nums">{visibleLogs.length}</span>
+          <span className="font-semibold text-heading tabular-nums">{filtered.length}</span>
           {' '}of{' '}
           <span className="font-semibold text-heading tabular-nums">{filtered.length}</span>
           {' '}events
@@ -142,7 +131,6 @@ const AuditLogs = () => {
             type="button"
             onClick={() => {
               clearFilters();
-              setVisible(PAGE_SIZE);
             }}
             className="text-[12px] font-semibold text-primary hover:underline"
           >
@@ -151,7 +139,15 @@ const AuditLogs = () => {
         )}
       </div>
 
-      {filtered.length === 0 ? (
+      {isError ? (
+        <ErrorState title="Couldn’t load audit logs" message={error?.message} onRetry={() => refetch()} />
+      ) : isLoading ? (
+        <div className="space-y-3">
+          <Skeleton className="h-24 w-full" />
+          <Skeleton className="h-24 w-full" />
+          <Skeleton className="h-24 w-full" />
+        </div>
+      ) : filtered.length === 0 ? (
         <div className="rounded-[20px] border border-dashed border-border/70 bg-white/60 py-6">
           <EmptyState
             icon={ScrollText}
@@ -182,18 +178,6 @@ const AuditLogs = () => {
             />
           ))}
 
-          {hasMore && (
-            <div className="flex justify-center pt-1">
-              <Button
-                type="button"
-                variant="secondary"
-                className="h-10 rounded-xl bg-white"
-                onClick={() => setVisible((n) => n + PAGE_SIZE)}
-              >
-                Load more
-              </Button>
-            </div>
-          )}
         </div>
       )}
 

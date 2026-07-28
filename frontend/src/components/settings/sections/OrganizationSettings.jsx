@@ -1,28 +1,45 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { Building2, Check, ImagePlus } from 'lucide-react';
 import Button from '../../ui/Button';
 import Input from '../../ui/Input';
 import SettingsSection from '../SettingsSection';
 import DangerZoneCard from '../DangerZoneCard';
-import { getOrganizationById } from '../../organizations/organizationData';
 import { ORG_INDUSTRIES, ORG_SIZES } from '../settingsData';
+import { useAuth } from '../../../context/AuthContext';
+import { useOrganization, useUpdateOrganization } from '../../../hooks/useOrganizations';
+import { getApiErrorMessage, getApiFieldErrors } from '../../../lib/api';
 
 const selectClass =
   'block w-full rounded-lg border border-border bg-white px-3 py-2.5 text-sm text-heading focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary hover:border-gray-400';
 
 const OrganizationSettings = () => {
-  const org = getOrganizationById('org-nova');
+  const { user } = useAuth();
+  const orgId = user?.organizationId;
+  const { data: org } = useOrganization(orgId, { enabled: Boolean(orgId) });
+  const updateOrganization = useUpdateOrganization();
   const [form, setForm] = useState({
-    name: org?.name || '',
-    industry: org?.industry || ORG_INDUSTRIES[0],
-    size: org?.size || ORG_SIZES[2],
-    website: org?.website || '',
+    name: '',
+    industry: ORG_INDUSTRIES[0],
+    size: ORG_SIZES[2],
+    website: '',
   });
   const [saved, setSaved] = useState(false);
+  const [error, setError] = useState('');
+  const [fieldErrors, setFieldErrors] = useState({});
   const [deleteOpen, setDeleteOpen] = useState(false);
 
   const set = (key) => (e) => setForm((f) => ({ ...f, [key]: e.target.value }));
+
+  useEffect(() => {
+    if (!org) return;
+    setForm({
+      name: org.name || '',
+      industry: org.industry || ORG_INDUSTRIES[0],
+      size: org.size || ORG_SIZES[2],
+      website: org.website || '',
+    });
+  }, [org]);
 
   return (
     <div className="space-y-5">
@@ -34,9 +51,24 @@ const OrganizationSettings = () => {
             type="button"
             variant="primary"
             className="h-10 rounded-xl"
-            onClick={() => {
-              setSaved(true);
-              window.setTimeout(() => setSaved(false), 2000);
+            onClick={async () => {
+              if (!orgId) return;
+              setError('');
+              setFieldErrors({});
+              try {
+                await updateOrganization.mutateAsync({
+                  id: orgId,
+                  name: form.name,
+                  website: form.website,
+                  industry: form.industry,
+                  size: form.size,
+                });
+                setSaved(true);
+                window.setTimeout(() => setSaved(false), 2000);
+              } catch (apiError) {
+                setFieldErrors(getApiFieldErrors(apiError));
+                setError(getApiErrorMessage(apiError, 'Could not update organization.'));
+              }
             }}
           >
             {saved ? (
@@ -49,6 +81,11 @@ const OrganizationSettings = () => {
           </Button>
         }
       >
+        {error ? (
+          <div role="alert" className="mb-4 rounded-xl border border-error/20 bg-red-50 px-3.5 py-2.5 text-sm text-error">
+            {error}
+          </div>
+        ) : null}
         <div className="flex flex-col sm:flex-row gap-5 sm:items-center mb-6 pb-6 border-b border-border/40">
           <button
             type="button"
@@ -77,8 +114,8 @@ const OrganizationSettings = () => {
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <Input label="Organization name" value={form.name} onChange={set('name')} />
-          <Input label="Website" value={form.website} onChange={set('website')} />
+          <Input label="Organization name" value={form.name} onChange={set('name')} error={fieldErrors.name} />
+          <Input label="Website" value={form.website} onChange={set('website')} error={fieldErrors.website} />
           <div>
             <label className="block text-sm font-medium text-heading mb-1.5">Industry</label>
             <select className={selectClass} value={form.industry} onChange={set('industry')}>

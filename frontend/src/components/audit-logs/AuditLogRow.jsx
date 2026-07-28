@@ -3,16 +3,46 @@ import { AnimatePresence, motion } from 'framer-motion';
 import { ChevronDown } from 'lucide-react';
 import AuditActionBadge, { AuditActionIcon } from './AuditActionBadge';
 import AuditDiffView from './AuditDiffView';
-import {
-  AUDIT_ACTION_META,
-  formatExactTime,
-  formatRelativeTime,
-} from './auditLogData';
+
+const AUDIT_ACTION_META = {
+  create: { verb: 'created' },
+  update: { verb: 'updated' },
+  delete: { verb: 'deleted' },
+  login: { verb: 'logged in' },
+  permission_change: { verb: 'changed permissions on' },
+  invite: { verb: 'invited' },
+  remove: { verb: 'removed' },
+};
+
+const formatExactTime = (iso) => {
+  try {
+    return new Date(iso).toLocaleString('en-US', {
+      month: 'short',
+      day: 'numeric',
+      year: 'numeric',
+      hour: 'numeric',
+      minute: '2-digit',
+    });
+  } catch {
+    return iso;
+  }
+};
+
+const formatRelativeTime = (iso) => {
+  try {
+    const mins = Math.max(0, Math.round((Date.now() - new Date(iso).getTime()) / 60000));
+    if (mins < 60) return `${mins}m ago`;
+    if (mins < 1440) return `${Math.round(mins / 60)}h ago`;
+    return `${Math.round(mins / 1440)}d ago`;
+  } catch {
+    return iso;
+  }
+};
 
 const AuditLogRow = ({ log, expanded, onToggle }) => {
   if (!log) return null;
   const meta = AUDIT_ACTION_META[log.action] || AUDIT_ACTION_META.update;
-  const hasDetails = Boolean(log.diffs?.length || log.metadata);
+  const hasDetails = Boolean(log.diff?.length || log.metadata);
 
   return (
     <motion.article
@@ -54,16 +84,16 @@ const AuditLogRow = ({ log, expanded, onToggle }) => {
             <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
               {log.module}
             </span>{' '}
-            {log.href ? (
+            {log.targetEntity?.link ? (
               <Link
-                to={log.href}
+                to={log.targetEntity?.link}
                 onClick={(e) => e.stopPropagation()}
                 className="font-semibold text-heading hover:text-primary"
               >
-                {log.entityName}
+                {log.targetEntity?.name}
               </Link>
             ) : (
-              <span className="font-semibold text-heading">{log.entityName}</span>
+              <span className="font-semibold text-heading">{log.targetEntity?.name || '—'}</span>
             )}
           </p>
 
@@ -107,12 +137,12 @@ const AuditLogRow = ({ log, expanded, onToggle }) => {
                 <Meta label="Module" value={log.module} />
               </div>
 
-              {log.action === 'update' || log.diffs?.length ? (
+              {log.action === 'update' || log.diff?.length ? (
                 <div>
                   <p className="mb-2 text-[11px] font-semibold uppercase tracking-[0.08em] text-slate-400">
                     Changes
                   </p>
-                  <AuditDiffView diffs={log.diffs} />
+                  <AuditDiffView diffs={log.diff} />
                 </div>
               ) : null}
 

@@ -1,6 +1,5 @@
 import { Download, Filter } from 'lucide-react';
 import Button from '../ui/Button';
-import { ORGANIZATIONS, departmentsForOrg } from './reportSelectors';
 
 const selectClass =
   'h-10 rounded-xl border border-border/60 bg-white px-3 text-[12.5px] font-medium text-heading focus:outline-none focus:border-primary/40 focus:ring-[3px] focus:ring-primary/12';
@@ -16,10 +15,10 @@ const ReportFilterBar = ({
   customBefore,
   onCustomAfter,
   onCustomBefore,
+  organizations = [],
+  departments = [],
   onExport,
 }) => {
-  const depts = departmentsForOrg(organizationId);
-
   return (
     <div
       className="
@@ -89,7 +88,7 @@ const ReportFilterBar = ({
             }}
           >
             <option value="all">All organizations</option>
-            {ORGANIZATIONS.map((o) => (
+            {organizations.map((o) => (
               <option key={o.id} value={o.id}>
                 {o.name}
               </option>
@@ -107,7 +106,7 @@ const ReportFilterBar = ({
             onChange={(e) => onDepartmentChange?.(e.target.value)}
           >
             <option value="all">All departments</option>
-            {depts.map((d) => (
+            {departments.map((d) => (
               <option key={d.id} value={d.id}>
                 {d.name}
               </option>

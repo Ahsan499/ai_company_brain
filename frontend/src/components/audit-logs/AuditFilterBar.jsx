@@ -2,12 +2,8 @@ import { useEffect } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { Filter, Search, X } from 'lucide-react';
 import Button from '../ui/Button';
-import {
-  AUDIT_ACTIONS,
-  AUDIT_ACTION_META,
-  AUDIT_MODULES,
-  getAuditActors,
-} from './auditLogData';
+const AUDIT_ACTIONS = ['create', 'update', 'delete', 'login', 'permission_change', 'invite', 'remove'];
+const AUDIT_MODULES = ['Organization', 'User', 'Department', 'Project', 'Task', 'Team', 'Meeting', 'File', 'Folder'];
 
 const selectClass =
   'h-10 w-full rounded-xl border border-border/60 bg-white px-3 text-[12.5px] font-medium text-heading focus:outline-none focus:border-primary/40 focus:ring-[3px] focus:ring-primary/12';
@@ -34,9 +30,8 @@ const FilterFields = ({
   onDateAfter,
   dateBefore,
   onDateBefore,
+  actors = [],
 }) => {
-  const actors = getAuditActors();
-
   return (
     <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-6 gap-2.5 sm:gap-3">
       <Field label="Search">
@@ -58,9 +53,9 @@ const FilterFields = ({
       <Field label="Action">
         <select className={selectClass} value={action} onChange={(e) => onAction?.(e.target.value)}>
           <option value="all">All actions</option>
-          {AUDIT_ACTIONS.map((a) => (
+            {AUDIT_ACTIONS.map((a) => (
             <option key={a} value={a}>
-              {AUDIT_ACTION_META[a].label}
+                {a.replace('_', ' ')}
             </option>
           ))}
         </select>

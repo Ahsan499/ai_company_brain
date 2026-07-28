@@ -145,6 +145,10 @@ export function AuthProvider({ children }) {
       login,
       logout,
       register,
+      updateCurrentUser: (nextUser) => {
+        setAuthUser(nextUser);
+        setUser(nextUser);
+      },
       extractErrorMessage,
     }),
     [user, token, isLoading, login, logout, register]

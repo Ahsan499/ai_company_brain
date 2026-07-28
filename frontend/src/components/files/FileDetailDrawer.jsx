@@ -1,22 +1,24 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { AnimatePresence, motion } from 'framer-motion';
-import {
-  CheckSquare,
-  Download,
-  FolderInput,
-  FolderKanban,
-  Pencil,
-  Share2,
-  Trash2,
-  X,
-} from 'lucide-react';
+import { CheckSquare, Download, FolderKanban, X } from 'lucide-react';
 import Button from '../ui/Button';
 import TaskComment from '../tasks/TaskComment';
 import FileTypeIcon from './FileTypeIcon';
 import { FILE_TYPE_META, formatFileDate } from './fileData';
+import Skeleton from '../ui/Skeleton';
+import ErrorState from '../ui/ErrorState';
+import { useCreateFileComment, useDownloadFile, useFile, useFileComments } from '../../hooks/useFiles';
+import { getApiErrorMessage } from '../../lib/api';
 
-const FileDetailDrawer = ({ open, file, onClose }) => {
+const FileDetailDrawer = ({ open, fileId, onClose }) => {
+  const { data: file, isLoading, isError, error, refetch } = useFile(fileId, { enabled: open && Boolean(fileId) });
+  const { data: comments = [] } = useFileComments(fileId, { enabled: open && Boolean(fileId) });
+  const createComment = useCreateFileComment();
+  const downloadFile = useDownloadFile();
+  const [newComment, setNewComment] = useState('');
+  const [actionError, setActionError] = useState('');
+
   useEffect(() => {
     if (!open) return undefined;
     const onKey = (e) => {
@@ -30,11 +32,32 @@ const FileDetailDrawer = ({ open, file, onClose }) => {
     };
   }, [open, onClose]);
 
-  const meta = file ? FILE_TYPE_META[file.type] || FILE_TYPE_META.other : null;
+  const meta = file ? FILE_TYPE_META[file.type] || FILE_TYPE_META.other : FILE_TYPE_META.other;
+
+  const submitComment = async () => {
+    if (!fileId || !newComment.trim()) return;
+    setActionError('');
+    try {
+      await createComment.mutateAsync({ fileId, text: newComment.trim() });
+      setNewComment('');
+    } catch (apiError) {
+      setActionError(getApiErrorMessage(apiError, 'Could not add comment.'));
+    }
+  };
+
+  const handleDownload = async () => {
+    if (!fileId) return;
+    setActionError('');
+    try {
+      await downloadFile.mutateAsync({ id: fileId, filename: file?.name });
+    } catch (apiError) {
+      setActionError(getApiErrorMessage(apiError, 'Could not download file.'));
+    }
+  };
 
   return (
     <AnimatePresence>
-      {open && file && (
+      {open && fileId && (
         <>
           <motion.button
             type="button"
@@ -49,160 +72,103 @@ const FileDetailDrawer = ({ open, file, onClose }) => {
           <motion.aside
             role="dialog"
             aria-modal="true"
-            aria-label={file.name}
+            aria-label={file?.name || 'File'}
             initial={{ x: '100%', y: 0 }}
             animate={{ x: 0, y: 0 }}
             exit={{ x: '100%' }}
             transition={{ type: 'spring', stiffness: 380, damping: 36 }}
-            className="
-              fixed z-[80] flex flex-col
-              inset-x-0 bottom-0 max-h-[92dvh] rounded-t-[24px]
-              sm:inset-y-0 sm:right-0 sm:left-auto sm:bottom-auto sm:max-h-none
-              sm:w-full sm:max-w-[560px] sm:rounded-none
-              bg-white/95 backdrop-blur-2xl
-              border border-white/60 border-border/40
-              sm:border-l sm:border-y-0 sm:border-r-0
-              shadow-[0_-12px_48px_rgba(15,23,42,0.16)]
-              sm:shadow-[-20px_0_60px_rgba(15,23,42,0.12)]
-            "
+            className="fixed z-[80] flex flex-col inset-x-0 bottom-0 max-h-[92dvh] rounded-t-[24px] sm:inset-y-0 sm:right-0 sm:left-auto sm:bottom-auto sm:max-h-none sm:w-full sm:max-w-[560px] sm:rounded-none bg-white/95 backdrop-blur-2xl border border-white/60 border-border/40 sm:border-l sm:border-y-0 sm:border-r-0 shadow-[0_-12px_48px_rgba(15,23,42,0.16)] sm:shadow-[-20px_0_60px_rgba(15,23,42,0.12)]"
           >
             <div className="mx-auto mt-2 mb-1 h-1 w-9 rounded-full bg-slate-200 sm:hidden" />
 
             <div className="flex items-start justify-between gap-3 border-b border-border/40 px-4 sm:px-5 py-3.5 shrink-0">
               <div className="flex items-start gap-3 min-w-0 flex-1">
-                <FileTypeIcon type={file.type} />
+                <FileTypeIcon type={file?.type || 'other'} />
                 <div className="min-w-0">
-                  <h2 className="text-[17px] sm:text-[18px] font-bold text-heading tracking-tight leading-snug border-b border-dashed border-transparent hover:border-border/60 cursor-text truncate">
-                    {file.name}
+                  <h2 className="text-[17px] sm:text-[18px] font-bold text-heading tracking-tight leading-snug truncate">
+                    {file?.name || 'Loading...'}
                   </h2>
-                  <div className="mt-1.5 flex flex-wrap items-center gap-2">
-                    <span className={`rounded-md px-1.5 py-0.5 text-[10.5px] font-semibold ring-1 ${meta.tone}`}>
-                      {meta.label}
-                    </span>
-                    <span className="text-[12px] text-secondaryText tabular-nums">{file.sizeLabel}</span>
-                  </div>
+                  {file && (
+                    <div className="mt-1.5 flex flex-wrap items-center gap-2">
+                      <span className={`rounded-md px-1.5 py-0.5 text-[10.5px] font-semibold ring-1 ${meta.tone}`}>
+                        {meta.label}
+                      </span>
+                      <span className="text-[12px] text-secondaryText tabular-nums">{file.sizeLabel}</span>
+                    </div>
+                  )}
                 </div>
               </div>
-              <button
-                type="button"
-                onClick={onClose}
-                className="h-9 w-9 inline-flex items-center justify-center rounded-xl text-secondaryText hover:bg-slate-100 hover:text-heading"
-                aria-label="Close"
-              >
+              <button type="button" onClick={onClose} className="h-9 w-9 inline-flex items-center justify-center rounded-xl text-secondaryText hover:bg-slate-100 hover:text-heading" aria-label="Close">
                 <X size={17} />
               </button>
             </div>
 
             <div className="flex-1 overflow-y-auto dashboard-scrollbar p-4 sm:p-5 space-y-5">
-              <div className="flex h-40 sm:h-48 items-center justify-center rounded-[18px] border border-border/45 bg-gradient-to-br from-slate-50 to-white">
-                <FileTypeIcon type={file.type} size="lg" />
-              </div>
-
-              <div className="flex flex-wrap gap-2">
-                {[
-                  { icon: Download, label: 'Download', primary: true },
-                  { icon: Pencil, label: 'Rename' },
-                  { icon: FolderInput, label: 'Move' },
-                  { icon: Share2, label: 'Share' },
-                  { icon: Trash2, label: 'Delete', danger: true },
-                ].map((a) => (
-                  <Button
-                    key={a.label}
-                    type="button"
-                    variant={a.primary ? 'primary' : 'secondary'}
-                    className={`h-9 rounded-xl gap-1.5 text-[12px] font-semibold ${
-                      a.primary ? 'shadow-[0_4px_12px_rgba(37,99,235,0.25)]' : 'bg-white'
-                    } ${a.danger ? 'text-error border-error/20 hover:bg-red-50' : ''}`}
-                  >
-                    <a.icon size={13} />
-                    {a.label}
-                  </Button>
-                ))}
-              </div>
-
-              <section className="grid grid-cols-2 gap-3">
-                <Meta label="Type" value={file.mimeLabel} />
-                <Meta label="Size" value={file.sizeLabel} />
-                <Meta label="Uploaded" value={formatFileDate(file.uploadedAt)} />
-                <Meta label="Modified" value={formatFileDate(file.modifiedAt)} />
-              </section>
-
-              <section>
-                <p className="text-[11px] font-semibold uppercase tracking-[0.06em] text-slate-400 mb-1.5">
-                  Uploaded by
-                </p>
-                <Link
-                  to={`/dashboard/users/${file.uploadedById}`}
-                  className="inline-flex items-center gap-2.5 hover:opacity-90"
-                >
-                  <span className="flex h-9 w-9 items-center justify-center rounded-full bg-gradient-to-br from-primary to-[#1D4ED8] text-white text-[11px] font-semibold">
-                    {file.uploadedByInitials}
-                  </span>
-                  <span className="text-[13px] font-semibold text-heading">{file.uploadedByName}</span>
-                </Link>
-              </section>
-
-              {(file.projectId || file.taskId) && (
-                <section className="flex flex-wrap gap-2">
-                  {file.projectId && (
-                    <Link
-                      to={`/dashboard/projects/${file.projectId}`}
-                      className="inline-flex items-center gap-1.5 rounded-full border border-border/50 bg-slate-50/90 px-2.5 py-1 text-[12px] font-semibold text-heading hover:border-primary/25 hover:text-primary"
-                    >
-                      <FolderKanban size={12} className="text-slate-400" />
-                      {file.projectName}
-                    </Link>
-                  )}
-                  {file.taskId && (
-                    <Link
-                      to={`/dashboard/tasks/${file.taskId}`}
-                      className="inline-flex items-center gap-1.5 rounded-full border border-border/50 bg-slate-50/90 px-2.5 py-1 text-[12px] font-semibold text-heading hover:border-primary/25 hover:text-primary"
-                    >
-                      <CheckSquare size={12} className="text-slate-400" />
-                      {file.taskTitle}
-                    </Link>
-                  )}
-                </section>
-              )}
-
-              <section>
-                <h3 className="text-[11px] font-semibold uppercase tracking-[0.08em] text-slate-400 mb-2">
-                  Version history
-                </h3>
-                <ul className="space-y-2">
-                  {(file.versions || []).map((v) => (
-                    <li
-                      key={v.id}
-                      className="flex items-center gap-2.5 rounded-[12px] border border-border/40 bg-slate-50/60 px-3 py-2"
-                    >
-                      <span className="rounded-md bg-white px-1.5 py-0.5 text-[10.5px] font-bold text-primary ring-1 ring-primary/10">
-                        {v.label}
-                      </span>
-                      <span className="min-w-0 flex-1 text-[12px] text-secondaryText truncate">
-                        uploaded by {v.userName}
-                      </span>
-                      <span className="text-[10.5px] font-medium text-slate-400 whitespace-nowrap">
-                        {v.time}
-                      </span>
-                    </li>
-                  ))}
-                </ul>
-              </section>
-
-              <section>
-                <h3 className="text-[11px] font-semibold uppercase tracking-[0.08em] text-slate-400 mb-2">
-                  Comments
-                </h3>
-                {(file.comments || []).length === 0 ? (
-                  <p className="text-[12.5px] text-secondaryText py-1">No comments yet.</p>
-                ) : (
-                  <div className="space-y-3">
-                    {file.comments.map((c) => (
-                      <TaskComment key={c.id} comment={c} />
-                    ))}
+              {isError ? (
+                <ErrorState title="Couldn’t load file detail" message={error?.message} onRetry={() => refetch()} />
+              ) : isLoading ? (
+                <div className="space-y-3">
+                  <Skeleton className="h-32 w-full" />
+                  <Skeleton className="h-16 w-full" />
+                  <Skeleton className="h-24 w-full" />
+                </div>
+              ) : file ? (
+                <>
+                  {actionError ? (
+                    <div role="alert" className="rounded-xl border border-error/20 bg-red-50 px-3 py-2 text-sm text-error">{actionError}</div>
+                  ) : null}
+                  <div className="flex h-40 sm:h-48 items-center justify-center rounded-[18px] border border-border/45 bg-gradient-to-br from-slate-50 to-white">
+                    <FileTypeIcon type={file.type} size="lg" />
                   </div>
-                )}
-              </section>
+                  <div className="flex flex-wrap gap-2">
+                    <Button type="button" variant="primary" onClick={handleDownload} className="h-9 rounded-xl gap-1.5 text-[12px] font-semibold shadow-[0_4px_12px_rgba(37,99,235,0.25)]">
+                      <Download size={13} />
+                      Download
+                    </Button>
+                  </div>
+                  <section className="grid grid-cols-2 gap-3">
+                    <Meta label="Type" value={file.mimeLabel} />
+                    <Meta label="Size" value={file.sizeLabel} />
+                    <Meta label="Uploaded" value={formatFileDate(file.uploadedAt)} />
+                    <Meta label="Modified" value={formatFileDate(file.modifiedAt)} />
+                  </section>
+                  <section>
+                    <p className="text-[11px] font-semibold uppercase tracking-[0.06em] text-slate-400 mb-1.5">Uploaded by</p>
+                    <Link to={`/dashboard/users/${file.uploadedById}`} className="inline-flex items-center gap-2.5 hover:opacity-90">
+                      <span className="flex h-9 w-9 items-center justify-center rounded-full bg-gradient-to-br from-primary to-[#1D4ED8] text-white text-[11px] font-semibold">{file.uploadedByInitials}</span>
+                      <span className="text-[13px] font-semibold text-heading">{file.uploadedByName}</span>
+                    </Link>
+                  </section>
+                  {(file.projectId || file.taskId) && (
+                    <section className="flex flex-wrap gap-2">
+                      {file.projectId && <Link to={`/dashboard/projects/${file.projectId}`} className="inline-flex items-center gap-1.5 rounded-full border border-border/50 bg-slate-50/90 px-2.5 py-1 text-[12px] font-semibold text-heading hover:border-primary/25 hover:text-primary"><FolderKanban size={12} className="text-slate-400" />{file.projectName}</Link>}
+                      {file.taskId && <Link to={`/dashboard/tasks/${file.taskId}`} className="inline-flex items-center gap-1.5 rounded-full border border-border/50 bg-slate-50/90 px-2.5 py-1 text-[12px] font-semibold text-heading hover:border-primary/25 hover:text-primary"><CheckSquare size={12} className="text-slate-400" />{file.taskTitle}</Link>}
+                    </section>
+                  )}
+                  <section>
+                    <h3 className="text-[11px] font-semibold uppercase tracking-[0.08em] text-slate-400 mb-2">Version history</h3>
+                    <ul className="space-y-2">
+                      {(file.versions || []).map((v) => (
+                        <li key={v.id} className="flex items-center gap-2.5 rounded-[12px] border border-border/40 bg-slate-50/60 px-3 py-2">
+                          <span className="rounded-md bg-white px-1.5 py-0.5 text-[10.5px] font-bold text-primary ring-1 ring-primary/10">{v.label}</span>
+                          <span className="min-w-0 flex-1 text-[12px] text-secondaryText truncate">uploaded by {v.userName}</span>
+                          <span className="text-[10.5px] font-medium text-slate-400 whitespace-nowrap">{v.time}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </section>
+                  <section>
+                    <h3 className="text-[11px] font-semibold uppercase tracking-[0.08em] text-slate-400 mb-2">Comments</h3>
+                    {comments.length === 0 ? <p className="text-[12.5px] text-secondaryText py-1">No comments yet.</p> : <div className="space-y-3">{comments.map((c) => <TaskComment key={c.id} comment={c} />)}</div>}
+                    <div className="mt-2.5 flex items-start gap-2">
+                      <textarea value={newComment} onChange={(event) => setNewComment(event.target.value)} rows={2} placeholder="Write a comment..." className="flex-1 rounded-lg border border-border/60 bg-white px-3 py-2 text-[12.5px] text-heading focus:outline-none focus:ring-2 focus:ring-primary/20 resize-none" />
+                      <Button type="button" variant="secondary" className="h-9 rounded-lg" onClick={submitComment} disabled={createComment.isPending || !newComment.trim()}>
+                        {createComment.isPending ? 'Posting...' : 'Post'}
+                      </Button>
+                    </div>
+                  </section>
+                </>
+              ) : null}
             </div>
           </motion.aside>
         </>

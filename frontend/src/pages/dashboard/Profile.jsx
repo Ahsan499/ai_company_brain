@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { AnimatePresence, motion } from 'framer-motion';
 import {
+  Activity,
   CheckSquare,
   FolderKanban,
   Timer,
@@ -20,38 +21,124 @@ import ProfileTabs from '../../components/profile/ProfileTabs';
 import AboutCard from '../../components/profile/AboutCard';
 import ContactInfoCard from '../../components/profile/ContactInfoCard';
 import SkillTags from '../../components/profile/SkillTags';
-import {
-  PROFILE_CURRENT_USER_ID,
-  getProfileUser,
-  getUserStats,
-  getUserBio,
-  getUserSkills,
-  getUserActivity,
-  getUserProfileProjects,
-  getUserProfileTasks,
-  getUserProfileTeams,
-  getUserTimesheet,
-  getTimezoneLabel,
-} from '../../components/profile/profileSelectors';
+import Skeleton from '../../components/ui/Skeleton';
+import ErrorState from '../../components/ui/ErrorState';
+import { useAuth } from '../../context/AuthContext';
+import { useUser, useUserProjects, useUserTasks } from '../../hooks/useUsers';
+import { useAuditLogs } from '../../hooks/useAuditLogs';
+import { useTimeEntries } from '../../hooks/useTimeTracking';
+import { useTeams } from '../../hooks/useTeams';
+
+const formatRelativeTime = (iso) => {
+  try {
+    const mins = Math.max(0, Math.round((Date.now() - new Date(iso).getTime()) / 60000));
+    if (mins < 60) return `${mins}m ago`;
+    if (mins < 1440) return `${Math.round(mins / 60)}h ago`;
+    return `${Math.round(mins / 1440)}d ago`;
+  } catch {
+    return iso;
+  }
+};
 
 const Profile = () => {
+  const { user: authUser } = useAuth();
   const navigate = useNavigate();
-  const userId = PROFILE_CURRENT_USER_ID;
-  const user = useMemo(() => getProfileUser(userId), [userId]);
+  const userId = authUser?.id;
+  const { data: user, isLoading: userLoading, isError: userError, error: userErrorObj, refetch: refetchUser } = useUser(userId, { enabled: Boolean(userId) });
   const [tab, setTab] = useState('overview');
   const [statusOverrides, setStatusOverrides] = useState({});
   const [toast, setToast] = useState('');
+  const { data: tasksData } = useUserTasks(userId, { perPage: 200 });
+  const { data: projectsData } = useUserProjects(userId, { perPage: 200 });
+  const { data: entriesData } = useTimeEntries({ userId, perPage: 500 });
+  const { data: teamsData } = useTeams({ perPage: 200 });
+  const { data: activityData } = useAuditLogs({ actorId: userId, perPage: 100 });
 
-  const stats = useMemo(() => getUserStats(userId), [userId]);
-  const bio = useMemo(() => getUserBio(userId), [userId]);
-  const skills = useMemo(() => getUserSkills(userId), [userId]);
-  const activity = useMemo(() => getUserActivity(userId), [userId]);
-  const projects = useMemo(() => getUserProfileProjects(userId), [userId]);
-  const teams = useMemo(() => getUserProfileTeams(userId), [userId]);
-  const timesheet = useMemo(() => getUserTimesheet(userId), [userId]);
-  const timezone = useMemo(() => getTimezoneLabel(user), [user]);
+  const projects = projectsData?.data ?? [];
+  const baseTasks = tasksData?.data ?? [];
+  const entries = entriesData?.data ?? [];
+  const teams = useMemo(() => {
+    const all = teamsData?.data ?? [];
+    return all.filter((team) => (team.memberIds || []).includes(userId));
+  }, [teamsData, userId]);
+  const bio = `Profile for ${user?.name || 'current user'}.`;
+  const skills = [];
+  const timezone = user?.location ? `Local time zone (${user.location})` : '—';
 
-  const baseTasks = useMemo(() => getUserProfileTasks(userId), [userId]);
+  const activity = useMemo(() => (
+    (activityData?.data ?? []).map((log) => ({
+      id: log.id,
+      icon: Activity,
+      title: `${String(log.action || 'activity').replace('_', ' ')} · ${log.targetEntity?.name || 'Entity'}`,
+      detail: `${log.module || log.entityType || 'Module'} by ${log.actorName || 'User'}`,
+      time: formatRelativeTime(log.createdAt || log.timestamp),
+      color: 'bg-gradient-to-br from-primary to-[#1D4ED8]',
+    }))
+  ), [activityData]);
+
+  const stats = useMemo(() => {
+    const tasksTotal = baseTasks.length;
+    const tasksCompleted = baseTasks.filter((task) => task.status === 'done').length;
+    const projectsTotal = projects.length;
+    const activeProjects = projects.filter((project) => project.status === 'active').length;
+    const now = new Date();
+    const monthPrefix = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+    const hoursThisMonthMinutes = entries
+      .filter((entry) => String(entry.date || '').startsWith(monthPrefix))
+      .reduce((sum, entry) => sum + (entry.durationMinutes || 0), 0);
+    return {
+      tasksCompleted,
+      tasksTotal,
+      activeProjects,
+      projectsTotal,
+      hoursThisMonth: formatHours(hoursThisMonthMinutes),
+      teamsJoined: teams.length,
+    };
+  }, [baseTasks, projects, entries, teams]);
+
+  const weekDates = useMemo(() => {
+    const today = new Date();
+    const day = today.getDay();
+    const mondayOffset = day === 0 ? -6 : 1 - day;
+    const monday = new Date(today);
+    monday.setDate(today.getDate() + mondayOffset);
+    return Array.from({ length: 7 }).map((_, i) => {
+      const d = new Date(monday);
+      d.setDate(monday.getDate() + i);
+      return d.toISOString().slice(0, 10);
+    });
+  }, []);
+
+  const timesheetRows = useMemo(() => {
+    const map = new Map();
+    entries.forEach((entry) => {
+      if (!entry.taskId || !entry.projectId) return;
+      if (!weekDates.includes(entry.date)) return;
+      const key = `${entry.taskId || 'no-task'}-${entry.projectId || 'no-project'}`;
+      if (!map.has(key)) {
+        map.set(key, {
+          key,
+          taskId: entry.taskId || 0,
+          taskTitle: entry.taskTitle || 'Unlinked entry',
+          projectId: entry.projectId || 0,
+          projectName: entry.projectName || 'Unlinked project',
+          days: Object.fromEntries(weekDates.map((date) => [date, 0])),
+          rowTotal: 0,
+        });
+      }
+      const row = map.get(key);
+      row.days[entry.date] += entry.durationMinutes || 0;
+      row.rowTotal += entry.durationMinutes || 0;
+    });
+    return Array.from(map.values());
+  }, [entries, weekDates]);
+
+  const timesheet = {
+    rows: timesheetRows,
+    weekDates,
+    totalMinutes: timesheetRows.reduce((sum, row) => sum + row.rowTotal, 0),
+  };
+
   const tasks = useMemo(
     () =>
       baseTasks.map((t) =>
@@ -73,6 +160,22 @@ const Profile = () => {
   };
 
   if (!user) {
+    if (userLoading) {
+      return (
+        <div className="mx-auto max-w-[1200px] space-y-4">
+          <Skeleton className="h-28 w-full" />
+          <Skeleton className="h-20 w-full" />
+          <Skeleton className="h-72 w-full" />
+        </div>
+      );
+    }
+    if (userError) {
+      return (
+        <div className="mx-auto max-w-lg py-16">
+          <ErrorState title="Couldn’t load profile" message={userErrorObj?.message} onRetry={() => refetchUser()} />
+        </div>
+      );
+    }
     return (
       <div className="mx-auto max-w-lg py-16">
         <EmptyState
@@ -136,11 +239,8 @@ const Profile = () => {
                   {user.departmentId && (
                     <p className="mt-3 text-[12px] text-secondaryText">
                       Department:{' '}
-                      <Link
-                        to={`/dashboard/departments/${user.departmentId}`}
-                        className="font-semibold text-primary hover:underline"
-                      >
-                        {user.department}
+                      <Link to={`/dashboard/departments/${user.departmentId}`} className="font-semibold text-primary hover:underline">
+                        {user.departmentName || user.department}
                       </Link>
                     </p>
                   )}

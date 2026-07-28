@@ -40,6 +40,9 @@ const SecuritySettings = () => {
         title="Security"
         description="Password, two-factor authentication, and active sessions."
       >
+        <p className="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+          Password change is currently UI-only until a backend password endpoint is added.
+        </p>
         <h3 className="text-[14px] font-semibold text-heading mb-3">Change password</h3>
         <div className="grid grid-cols-1 gap-4 max-w-lg">
           <Input

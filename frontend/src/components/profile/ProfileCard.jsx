@@ -1,6 +1,7 @@
 import React from 'react';
 import { motion } from 'framer-motion';
 import { FolderKanban, CheckSquare, CalendarDays } from 'lucide-react';
+import { useAuth } from '../../context/AuthContext';
 
 const STATS = [
   {
@@ -24,12 +25,18 @@ const STATS = [
 ];
 
 const ProfileCard = ({
-  name = 'Ahsan Taqweem',
-  role = 'Super Administrator',
-  email = 'ahsan@example.com',
-  initials = 'AT',
+  name,
+  role,
+  email,
+  initials,
   online = true,
 }) => {
+  const { user } = useAuth();
+  const resolvedName = name || user?.name || 'User';
+  const resolvedRole = role || user?.role || 'Member';
+  const resolvedEmail = email || user?.email || 'user@example.com';
+  const resolvedInitials = initials || user?.initials || 'U';
+
   return (
     <div
       className="
@@ -57,7 +64,7 @@ const ProfileCard = ({
               ring-[3px] ring-white
             "
           >
-            <span className="relative z-10 drop-shadow-sm">{initials}</span>
+            <span className="relative z-10 drop-shadow-sm">{resolvedInitials}</span>
             <span
               className="pointer-events-none absolute inset-0 rounded-full bg-gradient-to-t from-transparent via-transparent to-white/25"
               aria-hidden
@@ -77,13 +84,13 @@ const ProfileCard = ({
 
         <div className="min-w-0 flex-1 pt-0.5">
           <p className="text-[15px] sm:text-[16px] font-semibold text-heading tracking-[-0.02em] leading-snug truncate">
-            {name}
+            {resolvedName}
           </p>
           <p className="mt-1 text-[12px] font-medium text-primary/90 tracking-tight truncate">
-            {role}
+            {resolvedRole}
           </p>
           <p className="mt-0.5 text-[12px] text-secondaryText/90 tracking-tight truncate">
-            {email}
+            {resolvedEmail}
           </p>
         </div>
       </div>

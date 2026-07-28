@@ -41,7 +41,17 @@ const NAV_ITEMS = [
 ];
 
 const SidebarContent = ({ onNavigate }) => {
-  const { logout } = useAuth();
+  const { user, logout } = useAuth();
+  const permissions = user?.permissions || [];
+  const role = String(user?.role || '').toLowerCase();
+  const canViewAuditLogs =
+    permissions.includes('view_audit_logs')
+    || role.includes('super admin')
+    || role.includes('organization owner')
+    || role.includes('organization admin');
+  const visibleNavItems = NAV_ITEMS.filter((item) => (
+    item.to !== '/dashboard/audit-logs' || canViewAuditLogs
+  ));
 
   return (
   <div className="flex h-full flex-col">
@@ -53,7 +63,7 @@ const SidebarContent = ({ onNavigate }) => {
       className="flex-1 overflow-y-auto dashboard-scrollbar px-3 py-4 space-y-0.5"
       aria-label="Main"
     >
-      {NAV_ITEMS.map(({ to, label, icon: Icon, end }) => {
+      {visibleNavItems.map(({ to, label, icon: Icon, end }) => {
         const isPlaceholder = to.startsWith('#');
         return (
           <NavLink

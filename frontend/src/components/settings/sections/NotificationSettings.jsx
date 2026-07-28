@@ -53,6 +53,9 @@ const NotificationSettings = () => {
         </Button>
       }
     >
+      <p className="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+        Notification preferences are currently local UI-only and do not persist server-side yet.
+      </p>
       <div className="space-y-8">
         {NOTIFICATION_GROUPS.map((group) => (
           <div key={group.id}>

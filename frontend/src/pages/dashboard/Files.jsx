@@ -15,24 +15,18 @@ import {
 import Button from '../../components/ui/Button';
 import EmptyState from '../../components/dashboard/EmptyState';
 import StorageCard from '../../components/profile/StorageCard';
+import Skeleton from '../../components/ui/Skeleton';
+import ErrorState from '../../components/ui/ErrorState';
 import FileCard from '../../components/files/FileCard';
 import FileRow, { FileMobileRow } from '../../components/files/FileRow';
 import FolderCard, { FolderRow } from '../../components/files/FolderCard';
 import FileDetailDrawer from '../../components/files/FileDetailDrawer';
 import UploadDropzone from '../../components/files/UploadDropzone';
 import CreateFolderModal from '../../components/files/CreateFolderModal';
-import {
-  FILE_TYPES,
-  FILE_TYPE_META,
-  STORAGE,
-  filterAndSortFiles,
-  filterFolders,
-  getBreadcrumb,
-  getChildFolders,
-  getFileById,
-  getFilesInFolder,
-} from '../../components/files/fileData';
-import { PROJECTS } from '../../components/projects/projectData';
+import { FILE_TYPES, FILE_TYPE_META, STORAGE } from '../../components/files/fileData';
+import { useProjects } from '../../hooks/useProjects';
+import { useCreateFolder, useFiles, useFolderContents, useFolders, useUploadFile } from '../../hooks/useFiles';
+import { getApiErrorMessage } from '../../lib/api';
 
 const selectClass =
   'h-10 rounded-xl border border-border/60 bg-white px-3 text-[12.5px] font-medium text-heading focus:outline-none focus:border-primary/40 focus:ring-[3px] focus:ring-primary/12';
@@ -50,17 +44,30 @@ const Files = () => {
   const [view, setView] = useState('grid');
   const [folderOpen, setFolderOpen] = useState(false);
   const [toast, setToast] = useState('');
+  const [uploadProgress, setUploadProgress] = useState(0);
 
-  const breadcrumb = useMemo(() => getBreadcrumb(folderId), [folderId]);
-  const childFolders = useMemo(
-    () => filterFolders(getChildFolders(folderId), query),
-    [folderId, query]
-  );
-  const folderFiles = useMemo(() => getFilesInFolder(folderId), [folderId]);
-  const files = useMemo(
-    () => filterAndSortFiles(folderFiles, { query, type, projectId, sort }),
-    [folderFiles, query, type, projectId, sort]
-  );
+  const uploadFile = useUploadFile();
+  const createFolder = useCreateFolder();
+  const { data: projectsData } = useProjects({ perPage: 100 });
+  const { data: rootFoldersData, isLoading: rootFoldersLoading, isError: rootFoldersError, error: rootFoldersErrorObj, refetch: refetchRootFolders } = useFolders({ parentId: null, perPage: 200 });
+  const { data: folderContentsData, isLoading: contentsLoading, isError: contentsError, error: contentsErrorObj, refetch: refetchContents } = useFolderContents(folderId, { enabled: Boolean(folderId) });
+  const usingSearch = Boolean(query.trim()) || type !== 'all' || projectId !== 'all';
+  const { data: filesData, isLoading: filesLoading, isError: filesError, error: filesErrorObj, refetch: refetchFiles } = useFiles({ folderId: folderId || 'all', search: query, type, projectId, perPage: 200 });
+
+  const breadcrumb = folderId ? folderContentsData?.breadcrumb ?? [] : [];
+  const baseFolders = folderId ? folderContentsData?.folders ?? [] : rootFoldersData?.data ?? [];
+  const childFolders = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    if (!q) return baseFolders;
+    return baseFolders.filter((folder) => folder.name.toLowerCase().includes(q));
+  }, [baseFolders, query]);
+  const filesSource = usingSearch ? (filesData?.data ?? []) : (folderId ? folderContentsData?.files ?? [] : []);
+  const files = useMemo(() => {
+    const list = [...filesSource];
+    if (sort === 'date') return list.sort((a, b) => (b.uploadedAt || '').localeCompare(a.uploadedAt || ''));
+    if (sort === 'size') return list.sort((a, b) => (b.sizeBytes || 0) - (a.sizeBytes || 0));
+    return list.sort((a, b) => (a.name || '').localeCompare(b.name || ''));
+  }, [filesSource, sort]);
 
   const openFolder = (id) => {
     setSearchParams(id ? { folder: id } : {});
@@ -79,24 +86,36 @@ const Files = () => {
     navigate(`/dashboard/files${qs}`);
   }, [navigate, folderId]);
 
-  const activeFile = useMemo(() => {
-    if (!routeFileId) return null;
-    return getFileById(routeFileId);
-  }, [routeFileId]);
-
-  useEffect(() => {
-    if (routeFileId && !activeFile) {
-      navigate('/dashboard/files', { replace: true });
-    }
-  }, [routeFileId, activeFile, navigate]);
-
   useEffect(() => {
     if (!toast) return undefined;
     const t = window.setTimeout(() => setToast(''), 2200);
     return () => window.clearTimeout(t);
   }, [toast]);
 
-  const isEmpty = childFolders.length === 0 && files.length === 0;
+  const isLoading = rootFoldersLoading || (Boolean(folderId) && contentsLoading) || filesLoading;
+  const isError = rootFoldersError || contentsError || filesError;
+  const error = rootFoldersErrorObj || contentsErrorObj || filesErrorObj;
+  const refetch = folderId ? refetchContents : refetchRootFolders;
+  const isEmpty = !isLoading && !isError && childFolders.length === 0 && files.length === 0;
+
+  const handleUpload = async (selectedFiles) => {
+    if (!selectedFiles?.length) return;
+    setUploadProgress(0);
+    try {
+      for (const file of selectedFiles) {
+        await uploadFile.mutateAsync({
+          file,
+          folderId: folderId || undefined,
+          onProgress: setUploadProgress,
+        });
+      }
+      setToast('File uploaded successfully');
+    } catch (apiError) {
+      setToast(getApiErrorMessage(apiError, 'Upload failed'));
+    } finally {
+      setUploadProgress(0);
+    }
+  };
 
   return (
     <div className="mx-auto max-w-[1600px] space-y-5 sm:space-y-6">
@@ -140,7 +159,7 @@ const Files = () => {
             <Button
               type="button"
               variant="primary"
-              onClick={() => setToast('Upload queued (demo only)')}
+              onClick={() => document.querySelector('input[type="file"]')?.click()}
               className="h-11 rounded-xl gap-2 text-[13px] font-semibold shadow-[0_6px_16px_rgba(37,99,235,0.28)]"
             >
               <Upload size={15} />
@@ -175,7 +194,7 @@ const Files = () => {
         ))}
       </nav>
 
-      <UploadDropzone onClick={() => setToast('Upload queued (demo only)')} />
+      <UploadDropzone onUpload={handleUpload} uploading={uploadFile.isPending} progress={uploadProgress} />
 
       <motion.div
         initial={{ opacity: 0, y: 10 }}
@@ -257,7 +276,7 @@ const Files = () => {
             className={`${selectClass} max-w-[200px]`}
           >
             <option value="all">All projects</option>
-            {PROJECTS.map((p) => (
+            {(projectsData?.data ?? []).map((p) => (
               <option key={p.id} value={p.id}>
                 {p.name}
               </option>
@@ -271,7 +290,15 @@ const Files = () => {
         </div>
       </motion.div>
 
-      {isEmpty ? (
+      {isError ? (
+        <ErrorState title="Couldn’t load files" message={error?.message} onRetry={() => { refetch(); refetchFiles(); }} />
+      ) : isLoading ? (
+        <div className="space-y-3">
+          <Skeleton className="h-12 w-full" />
+          <Skeleton className="h-24 w-full" />
+          <Skeleton className="h-24 w-full" />
+        </div>
+      ) : isEmpty ? (
         <div className="rounded-[20px] border border-border/45 bg-white/85 py-6">
           <EmptyState
             icon={FilesIcon}
@@ -282,7 +309,7 @@ const Files = () => {
                 type="button"
                 variant="primary"
                 className="rounded-xl"
-                onClick={() => setToast('Upload queued (demo only)')}
+                onClick={() => document.querySelector('input[type="file"]')?.click()}
               >
                 Upload File
               </Button>
@@ -373,14 +400,11 @@ const Files = () => {
 
       <AnimatePresenceToast toast={toast} />
 
-      <FileDetailDrawer
-        open={Boolean(routeFileId && activeFile)}
-        file={activeFile}
-        onClose={closeFile}
-      />
+      <FileDetailDrawer open={Boolean(routeFileId)} fileId={routeFileId} onClose={closeFile} />
       <CreateFolderModal
         open={folderOpen}
         onClose={() => setFolderOpen(false)}
+        onSubmit={(payload) => createFolder.mutateAsync(payload)}
         currentFolderId={folderId}
       />
     </div>

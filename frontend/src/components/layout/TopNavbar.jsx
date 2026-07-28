@@ -10,6 +10,7 @@ import {
   ChevronDown,
 } from 'lucide-react';
 import ProfileDropdown from '../profile/ProfileDropdown';
+import { useAuth } from '../../context/AuthContext';
 
 const IconButton = ({ children, className = '', label, ...props }) => (
   <button
@@ -34,6 +35,7 @@ const IconButton = ({ children, className = '', label, ...props }) => (
 const TopNavbar = ({ onMenuClick, onNotificationsClick, onSearchClick }) => {
   const [profileOpen, setProfileOpen] = useState(false);
   const profileTriggerRef = useRef(null);
+  const { user } = useAuth();
 
   const isMac =
     typeof navigator !== 'undefined' &&
@@ -145,7 +147,7 @@ const TopNavbar = ({ onMenuClick, onNotificationsClick, onSearchClick }) => {
           >
             <div className="relative">
               <div className="h-8 w-8 sm:h-9 sm:w-9 rounded-full bg-gradient-to-br from-[#3B82F6] via-primary to-[#1E40AF] flex items-center justify-center text-white text-[11px] font-semibold ring-2 ring-white shadow-[0_2px_8px_rgba(37,99,235,0.35)]">
-                AT
+                {user?.initials || 'U'}
               </div>
               <span className="absolute bottom-0 right-0 h-2.5 w-2.5 rounded-full bg-success shadow-[0_0_0_2px_#fff]" />
             </div>

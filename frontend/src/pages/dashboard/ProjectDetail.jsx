@@ -34,11 +34,8 @@ import MeetingRow from '../../components/meetings/MeetingRow';
 import FileRow from '../../components/files/FileRow';
 import { formatProjectDate, daysRemaining } from '../../components/projects/projectData';
 import { useMeetings } from '../../hooks/useMeetings';
-import {
-  formatHours,
-  getProjectLoggedMinutes,
-} from '../../components/time-tracking/timeEntryData';
-import { getFilesByProject } from '../../components/files/fileData';
+import { formatHours } from '../../components/time-tracking/timeEntryData';
+import { useProjectFiles } from '../../hooks/useFiles';
 import {
   useAddProjectMember,
   useProject,
@@ -197,10 +194,8 @@ const ProjectDetail = () => {
   const { data: meetingsData } = useMeetings({ projectId: project?.id ?? 'all', perPage: 50 });
   const projectMeetings = meetingsData?.data ?? [];
 
-  const projectFiles = useMemo(
-    () => (project ? getFilesByProject(project.id) : []),
-    [project]
-  );
+  const { data: projectFilesData } = useProjectFiles(project?.id, { perPage: 100 });
+  const projectFiles = projectFilesData?.data ?? [];
 
   const remaining = project ? daysRemaining(project.dueDate) : null;
   const memberIds = projectMembers.map((member) => member.userId ?? member.id);
@@ -445,7 +440,7 @@ const ProjectDetail = () => {
                 <ProjectStatCard
                   icon={Timer}
                   label="Hours logged"
-                  value={formatHours(getProjectLoggedMinutes(project.id))}
+                  value={project?.totalHoursLogged ? `${project.totalHoursLogged}h` : formatHours(0)}
                   tone="from-[#EEF2FF] to-[#C7D2FE] text-indigo-700 ring-indigo-500/10"
                 />
                 <ProjectStatCard

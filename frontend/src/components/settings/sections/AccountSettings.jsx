@@ -1,18 +1,21 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { Camera, Check } from 'lucide-react';
 import Button from '../../ui/Button';
 import Input from '../../ui/Input';
 import SettingsSection from '../SettingsSection';
 import DangerZoneCard from '../DangerZoneCard';
-import { getUserById } from '../../users/userData';
 import { JOB_TITLES, LANGUAGES, TIMEZONES } from '../settingsData';
+import { useAuth } from '../../../context/AuthContext';
+import { useUpdateProfile } from '../../../hooks/useSettings';
+import { getApiErrorMessage, getApiFieldErrors } from '../../../lib/api';
 
 const selectClass =
   'block w-full rounded-lg border border-border bg-white px-3 py-2.5 text-sm text-heading focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary hover:border-gray-400';
 
 const AccountSettings = () => {
-  const user = getUserById('usr-ahsan');
+  const { user, updateCurrentUser } = useAuth();
+  const updateProfile = useUpdateProfile();
   const [form, setForm] = useState({
     name: user?.name || '',
     email: user?.email || '',
@@ -22,13 +25,42 @@ const AccountSettings = () => {
     language: 'en',
   });
   const [saved, setSaved] = useState(false);
+  const [error, setError] = useState('');
+  const [fieldErrors, setFieldErrors] = useState({});
   const [deleteOpen, setDeleteOpen] = useState(false);
+
+  useEffect(() => {
+    setForm((prev) => ({
+      ...prev,
+      name: user?.name || '',
+      email: user?.email || '',
+      phone: user?.phone || '',
+    }));
+  }, [user?.name, user?.email, user?.phone]);
 
   const set = (key) => (e) => setForm((f) => ({ ...f, [key]: e.target.value }));
 
-  const handleSave = () => {
-    setSaved(true);
-    window.setTimeout(() => setSaved(false), 2000);
+  const handleSave = async () => {
+    if (!user?.id) return;
+    setError('');
+    setFieldErrors({});
+    try {
+      const updated = await updateProfile.mutateAsync({
+        id: user.id,
+        name: form.name,
+        email: form.email,
+        phone: form.phone,
+      });
+      updateCurrentUser({
+        ...user,
+        ...updated,
+      });
+      setSaved(true);
+      window.setTimeout(() => setSaved(false), 2000);
+    } catch (apiError) {
+      setFieldErrors(getApiFieldErrors(apiError));
+      setError(getApiErrorMessage(apiError, 'Could not update profile.'));
+    }
   };
 
   return (
@@ -52,13 +84,18 @@ const AccountSettings = () => {
                 </motion.span>
               ) : (
                 <motion.span key="save" initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
-                  Save Changes
+                  {updateProfile.isPending ? 'Saving...' : 'Save Changes'}
                 </motion.span>
               )}
             </AnimatePresence>
           </Button>
         }
       >
+        {error ? (
+          <div role="alert" className="mb-4 rounded-xl border border-error/20 bg-red-50 px-3.5 py-2.5 text-sm text-error">
+            {error}
+          </div>
+        ) : null}
         <div className="flex flex-col sm:flex-row gap-5 sm:items-center mb-6 pb-6 border-b border-border/40">
           <div className="relative">
             <div className="flex h-20 w-20 items-center justify-center rounded-full bg-gradient-to-br from-primary to-[#1D4ED8] text-white text-[22px] font-semibold ring-4 ring-primary/10 shadow-md">
@@ -80,9 +117,9 @@ const AccountSettings = () => {
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <Input label="Full name" value={form.name} onChange={set('name')} />
-          <Input label="Email" type="email" value={form.email} onChange={set('email')} />
-          <Input label="Phone" value={form.phone} onChange={set('phone')} />
+          <Input label="Full name" value={form.name} onChange={set('name')} error={fieldErrors.name} />
+          <Input label="Email" type="email" value={form.email} onChange={set('email')} error={fieldErrors.email} />
+          <Input label="Phone" value={form.phone} onChange={set('phone')} error={fieldErrors.phone} />
           <div>
             <label className="block text-sm font-medium text-heading mb-1.5">Job title</label>
             <select className={selectClass} value={form.jobTitle} onChange={set('jobTitle')}>

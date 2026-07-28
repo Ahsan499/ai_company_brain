@@ -24,22 +24,22 @@ import TimeReportChart from '../../components/time-tracking/TimeReportChart';
 import UserTimeBreakdownTable from '../../components/time-tracking/UserTimeBreakdownTable';
 import DashboardPanel, { PanelHeader } from '../../components/dashboard/DashboardPanel';
 import EmptyState from '../../components/dashboard/EmptyState';
+import Skeleton from '../../components/ui/Skeleton';
+import ErrorState from '../../components/ui/ErrorState';
+import { useOrganizations } from '../../hooks/useOrganizations';
+import { useDepartments } from '../../hooks/useDepartments';
 import {
-  filterScopedEntities,
-  formatHours,
-  getOverviewStats,
-  getTaskCompletionTrend,
-  getProjectsByStatus,
-  getTasksByStatus,
-  getTasksByPriority,
-  getRecentCompletions,
-  getProjectsReportRows,
-  getProjectsByDepartment,
-  getOverdueTasks,
-  getTeamPerformance,
-  getTimeReportBundle,
-  resolveDateRange,
-} from '../../components/reports/reportSelectors';
+  useOverdueTasks,
+  useProjectsByDepartment,
+  useProjectsByStatus,
+  useReportsOverview,
+  useTaskCompletionTrend,
+  useTasksByPriority,
+  useTasksByStatus,
+  useTeamPerformance,
+} from '../../hooks/useReports';
+import { useTimeReportByProject, useTimeReportByUser, useTimeReportSummary } from '../../hooks/useTimeTracking';
+import { useProjects } from '../../hooks/useProjects';
 
 const Reports = () => {
   const navigate = useNavigate();
@@ -51,42 +51,104 @@ const Reports = () => {
   const [customBefore, setCustomBefore] = useState('');
   const [exportToast, setExportToast] = useState(false);
 
-  const range = useMemo(
-    () => resolveDateRange(preset, customAfter, customBefore),
-    [preset, customAfter, customBefore]
-  );
+  const range = useMemo(() => {
+    const today = new Date();
+    const format = (date) => date.toISOString().slice(0, 10);
+    if (preset === 'custom') {
+      return { after: customAfter || '', before: customBefore || '' };
+    }
+    if (preset === 'this-week') {
+      const day = today.getDay();
+      const mondayOffset = day === 0 ? -6 : 1 - day;
+      const start = new Date(today);
+      start.setDate(today.getDate() + mondayOffset);
+      return { after: format(start), before: format(today) };
+    }
+    if (preset === 'this-quarter') {
+      const qStartMonth = Math.floor(today.getMonth() / 3) * 3;
+      const start = new Date(today.getFullYear(), qStartMonth, 1);
+      return { after: format(start), before: format(today) };
+    }
+    const start = new Date(today.getFullYear(), today.getMonth(), 1);
+    return { after: format(start), before: format(today) };
+  }, [preset, customAfter, customBefore]);
 
-  const scope = useMemo(
-    () =>
-      filterScopedEntities({
-        organizationId,
-        departmentId,
-        after: range.after,
-        before: range.before,
-      }),
+  const filterParams = useMemo(
+    () => ({
+      organizationId,
+      departmentId,
+      dateFrom: range.after,
+      dateTo: range.before,
+    }),
     [organizationId, departmentId, range]
   );
 
-  const overview = useMemo(() => getOverviewStats(scope), [scope]);
-  const trend = useMemo(() => getTaskCompletionTrend(scope.tasks), [scope.tasks]);
-  const projectStatus = useMemo(() => getProjectsByStatus(scope.projects), [scope.projects]);
-  const taskStatus = useMemo(() => getTasksByStatus(scope.tasks), [scope.tasks]);
-  const taskPriority = useMemo(() => getTasksByPriority(scope.tasks), [scope.tasks]);
-  const recent = useMemo(
-    () => getRecentCompletions(scope.tasks, scope.projects),
-    [scope.tasks, scope.projects]
-  );
-  const projectRows = useMemo(() => getProjectsReportRows(scope.projects), [scope.projects]);
-  const projectsByDept = useMemo(
-    () => getProjectsByDepartment(scope.projects),
-    [scope.projects]
-  );
-  const overdue = useMemo(() => getOverdueTasks(scope.tasks), [scope.tasks]);
-  const teamPerf = useMemo(
-    () => getTeamPerformance(scope.teams, scope.tasks, scope.entries),
-    [scope]
-  );
-  const timeBundle = useMemo(() => getTimeReportBundle(scope.entries), [scope.entries]);
+  const { data: organizationsData } = useOrganizations({ perPage: 200 });
+  const { data: departmentsData } = useDepartments({ organizationId, perPage: 200 });
+
+  const overviewQuery = useReportsOverview(filterParams);
+  const trendQuery = useTaskCompletionTrend(filterParams);
+  const projectStatusQuery = useProjectsByStatus(filterParams);
+  const projectsByDeptQuery = useProjectsByDepartment(filterParams);
+  const projectsQuery = useProjects({
+    organizationId,
+    departmentId,
+    page: 1,
+    perPage: 100,
+  });
+  const taskStatusQuery = useTasksByStatus(filterParams);
+  const taskPriorityQuery = useTasksByPriority(filterParams);
+  const overdueQuery = useOverdueTasks({ ...filterParams, perPage: 100 });
+  const teamPerfQuery = useTeamPerformance(filterParams);
+  const timeSummaryQuery = useTimeReportSummary(filterParams);
+  const timeByProjectQuery = useTimeReportByProject(filterParams);
+  const timeByUserQuery = useTimeReportByUser(filterParams);
+
+  const overview = overviewQuery.data ?? {};
+  const trend = trendQuery.data ?? [];
+  const projectStatus = projectStatusQuery.data ?? [];
+  const taskStatus = taskStatusQuery.data ?? [];
+  const taskPriority = taskPriorityQuery.data ?? [];
+  const projectsByDept = projectsByDeptQuery.data ?? [];
+  const overdue = overdueQuery.data?.data ?? [];
+  const teamPerf = (teamPerfQuery.data ?? []).map((row) => ({
+    ...row,
+    hoursLabel: `${row.hoursLogged ?? Math.round((row.hoursMinutes || 0) / 60)}h`,
+  }));
+  const projectRows = (projectsQuery.data?.data ?? []).map((project) => {
+    const today = new Date().toISOString().slice(0, 10);
+    const delayed = project.status !== 'completed' && project.dueDate && project.dueDate < today;
+    const total = project.taskCounts?.total ?? project.tasksTotal ?? 0;
+    const done = project.taskCounts?.done ?? project.tasksDone ?? 0;
+    return {
+      id: project.id,
+      name: project.name,
+      status: project.status,
+      departmentName: project.departmentName,
+      progress: project.progress ?? 0,
+      delayed,
+      tasksDone: done,
+      tasksTotal: total,
+      completionRatio: total ? Math.round((done / total) * 100) : 0,
+    };
+  });
+  const timeBundle = {
+    totalMinutes: timeSummaryQuery.data?.totalMinutes ?? timeSummaryQuery.data?.totalHoursMinutes ?? 0,
+    byProject: (timeByProjectQuery.data ?? []).map((row) => ({
+      name: row.projectName || 'Unassigned',
+      hours: row.hours || 0,
+    })),
+    byDepartment: timeSummaryQuery.data?.hoursByDepartment ?? [],
+    byUser: (timeByUserQuery.data ?? []).map((row) => ({
+      userId: row.userId,
+      userName: row.userName,
+      initials: row.initials,
+      teamName: row.teamName || '—',
+      minutes: row.durationMinutes || 0,
+      billable: row.durationMinutes || 0,
+      nonBillable: 0,
+    })),
+  };
 
   const handleExport = () => {
     setExportToast(true);
@@ -127,6 +189,8 @@ const Reports = () => {
         customBefore={customBefore}
         onCustomAfter={setCustomAfter}
         onCustomBefore={setCustomBefore}
+        organizations={organizationsData?.data ?? []}
+        departments={departmentsData?.data ?? []}
         onExport={handleExport}
       />
 
@@ -143,26 +207,32 @@ const Reports = () => {
         >
           {tab === 'overview' && (
             <>
+              {overviewQuery.isError || trendQuery.isError || projectStatusQuery.isError ? (
+                <ErrorState message={overviewQuery.error?.message || trendQuery.error?.message || projectStatusQuery.error?.message} onRetry={() => { overviewQuery.refetch(); trendQuery.refetch(); projectStatusQuery.refetch(); }} />
+              ) : overviewQuery.isLoading ? (
+                <Skeleton className="h-56 w-full" />
+              ) : (
+              <>
               <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3.5 sm:gap-4">
                 <ReportStatCard
                   title="Active projects"
-                  value={overview.activeProjects}
-                  hint={`${scope.projects.length} in filter scope`}
+                  value={overview.activeProjects ?? 0}
+                  hint="Projects in current filter scope"
                   icon={FolderKanban}
                   tone="blue"
                   delay={0.02}
                 />
                 <ReportStatCard
                   title="Tasks"
-                  value={overview.totalTasks}
-                  hint={`${overview.done} done · ${overview.inProgress} in progress · ${overview.overdue} overdue`}
+                  value={overview.taskCounts?.total ?? 0}
+                  hint={`${overview.taskCounts?.done ?? 0} done · ${overview.taskCounts?.inProgress ?? 0} in progress · ${overview.taskCounts?.overdue ?? 0} overdue`}
                   icon={CheckSquare}
                   tone="purple"
                   delay={0.06}
                 />
                 <ReportStatCard
                   title="Hours logged"
-                  value={overview.hoursLabel}
+                  value={`${overview.hoursLoggedThisPeriod ?? 0}h`}
                   hint="From time entries in period"
                   icon={Timer}
                   tone="green"
@@ -170,7 +240,7 @@ const Reports = () => {
                 />
                 <ReportStatCard
                   title="Active users"
-                  value={overview.activeUsers}
+                  value={overview.activeUsers ?? 0}
                   hint="Workspace-wide active status"
                   icon={UserRound}
                   tone="orange"
@@ -189,67 +259,17 @@ const Reports = () => {
               </div>
 
               <DashboardPanel hoverLift={false} delay={0.08}>
-                <PanelHeader
-                  title="Recent completions"
-                  subtitle="Recently done tasks and completed projects"
-                />
-                {recent.length === 0 ? (
-                  <EmptyState
-                    icon={CheckCircle2}
-                    title="No completions yet"
-                    description="Finished work in scope will list here."
-                  />
-                ) : (
-                  <ul className="divide-y divide-border/40">
-                    {recent.map((item, i) => (
-                      <motion.li
-                        key={`${item.type}-${item.id}`}
-                        initial={{ opacity: 0 }}
-                        animate={{ opacity: 1 }}
-                        transition={{ delay: i * 0.03 }}
-                      >
-                        <Link
-                          to={item.href}
-                          className="flex items-center gap-3 py-3 hover:bg-slate-50/60 -mx-2 px-2 rounded-xl transition-colors"
-                        >
-                          <span
-                            className={`
-                              flex h-9 w-9 shrink-0 items-center justify-center rounded-[11px] ring-1
-                              ${
-                                item.type === 'project'
-                                  ? 'bg-emerald-50 text-emerald-700 ring-emerald-500/15'
-                                  : 'bg-primary/8 text-primary ring-primary/10'
-                              }
-                            `}
-                          >
-                            {item.type === 'project' ? (
-                              <FolderKanban size={15} />
-                            ) : (
-                              <CheckSquare size={15} />
-                            )}
-                          </span>
-                          <span className="min-w-0 flex-1">
-                            <span className="block text-[13.5px] font-semibold text-heading truncate">
-                              {item.title}
-                            </span>
-                            <span className="block text-[11.5px] text-secondaryText truncate">
-                              {item.meta}
-                            </span>
-                          </span>
-                          <span className="text-[11.5px] text-slate-400 tabular-nums shrink-0">
-                            {item.date}
-                          </span>
-                        </Link>
-                      </motion.li>
-                    ))}
-                  </ul>
-                )}
+                <PanelHeader title="Recent completions" subtitle="Server-side endpoint pending for recent feed" />
+                <EmptyState icon={CheckCircle2} title="Not available yet" description="Overview metrics and charts are live; recent completion stream is not exposed in current API." />
               </DashboardPanel>
+              </>
+              )}
             </>
           )}
 
           {tab === 'projects' && (
             <>
+              {projectsByDeptQuery.isError ? <ErrorState message={projectsByDeptQuery.error?.message} onRetry={() => projectsByDeptQuery.refetch()} /> : null}
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-5">
                 <MetricBarChart
                   title="Projects by department"
@@ -271,6 +291,7 @@ const Reports = () => {
 
           {tab === 'tasks' && (
             <>
+              {overdueQuery.isError ? <ErrorState message={overdueQuery.error?.message} onRetry={() => overdueQuery.refetch()} /> : null}
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-5">
                 <StatusDistributionChart
                   title="Tasks by status"
@@ -294,6 +315,7 @@ const Reports = () => {
 
           {tab === 'team' && (
             <>
+              {teamPerfQuery.isError ? <ErrorState message={teamPerfQuery.error?.message} onRetry={() => teamPerfQuery.refetch()} /> : null}
               <TeamComparisonChart data={teamPerf} delay={0.05} />
               <TeamPerformanceTable rows={teamPerf} />
             </>
@@ -304,21 +326,21 @@ const Reports = () => {
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3.5">
                 <ReportStatCard
                   title="Total hours"
-                  value={formatHours(timeBundle.totalMinutes)}
+                  value={`${timeSummaryQuery.data?.totalHours ?? 0}h`}
                   icon={Clock}
                   tone="blue"
                   delay={0.02}
                 />
                 <ReportStatCard
                   title="Projects with time"
-                  value={timeBundle.byProject.length}
+                  value={timeBundle.byProject.length || 0}
                   icon={FolderKanban}
                   tone="green"
                   delay={0.06}
                 />
                 <ReportStatCard
                   title="People logging"
-                  value={timeBundle.byUser.length}
+                  value={timeBundle.byUser.length || 0}
                   icon={UserRound}
                   tone="purple"
                   delay={0.1}

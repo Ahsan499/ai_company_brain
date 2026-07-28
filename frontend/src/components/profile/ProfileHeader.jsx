@@ -102,7 +102,7 @@ const ProfileHeader = ({ user, isOwnProfile = false, onMessage }) => {
                   className="inline-flex items-center gap-1.5 rounded-full bg-slate-100 px-2.5 py-1 text-[11.5px] font-semibold text-heading ring-1 ring-slate-200/80 hover:bg-slate-200/70"
                 >
                   <Network size={12} className="text-slate-500" />
-                  {user.department}
+                  {user.departmentName || user.department}
                 </Link>
               )}
             </div>
