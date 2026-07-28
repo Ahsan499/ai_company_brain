@@ -165,6 +165,7 @@ export function useUploadFile() {
       if (taskId) formData.append('task_id', taskId);
 
       const res = await apiClient.post('/files', formData, {
+        withCredentials: true,
         headers: { 'Content-Type': 'multipart/form-data' },
         onUploadProgress: (event) => {
           if (!onProgress || !event?.total) return;

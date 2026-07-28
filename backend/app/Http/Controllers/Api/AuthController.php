@@ -10,7 +10,7 @@ use App\Services\AuthService;
 use App\Traits\ApiResponse;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
-use RuntimeException;
+use Illuminate\Support\Facades\Auth;
 
 class AuthController extends Controller
 {
@@ -21,30 +21,39 @@ class AuthController extends Controller
     public function register(RegisterRequest $request): JsonResponse
     {
         $result = $this->authService->register($request->validated());
+        Auth::login($result['user']);
+        $request->session()->regenerate();
 
         return $this->successResponse([
             'user' => new UserResource($result['user']),
-            'token' => $result['token'],
         ], 'User registered successfully.', 201);
     }
 
     public function login(LoginRequest $request): JsonResponse
     {
-        try {
-            $result = $this->authService->login($request->validated());
-        } catch (RuntimeException $e) {
-            return $this->errorResponse($e->getMessage(), null, 401);
+        $credentials = $request->validated();
+
+        if (! Auth::attempt([
+            'email' => $credentials['email'],
+            'password' => $credentials['password'],
+        ])) {
+            return $this->errorResponse('Invalid credentials.', null, 401);
         }
 
+        $request->session()->regenerate();
+        $user = $request->user();
+        $user?->forceFill(['last_login_at' => now()])->save();
+
         return $this->successResponse([
-            'user' => new UserResource($result['user']),
-            'token' => $result['token'],
+            'user' => new UserResource($this->authService->me($user)),
         ], 'Login successful.');
     }
 
     public function logout(Request $request): JsonResponse
     {
-        $this->authService->logout($request->user());
+        Auth::guard('web')->logout();
+        $request->session()->invalidate();
+        $request->session()->regenerateToken();
 
         return $this->successResponse(null, 'Logout successful.');
     }

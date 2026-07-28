@@ -24,11 +24,8 @@ class AuthService
 
             $user->assignRole(RoleLabel::toSpatie('Employee'));
 
-            $token = $user->createToken('api')->plainTextToken;
-
             return [
                 'user' => $user->load(['roles', 'permissions', 'organization', 'department']),
-                'token' => $token,
             ];
         });
     }

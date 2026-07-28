@@ -8,14 +8,7 @@ import {
 } from 'react';
 import { flushSync } from 'react-dom';
 import { useNavigate } from 'react-router-dom';
-import apiClient, { setUnauthorizedHandler } from '../lib/apiClient';
-import {
-  clearAuthSession,
-  getToken,
-  getUser,
-  setAuthSession,
-  setAuthUser,
-} from '../lib/authSession';
+import apiClient, { getCsrfCookie, setUnauthorizedHandler } from '../lib/apiClient';
 import { queryClient } from '../lib/queryClient';
 
 const AuthContext = createContext(null);
@@ -34,14 +27,11 @@ function extractErrorMessage(error, fallback = 'Something went wrong.') {
 
 export function AuthProvider({ children }) {
   const navigate = useNavigate();
-  const [token, setToken] = useState(() => getToken());
-  const [user, setUser] = useState(() => getUser());
-  const [isLoading, setIsLoading] = useState(() => Boolean(getToken()));
+  const [user, setUser] = useState(null);
+  const [isLoading, setIsLoading] = useState(true);
 
   const clearClientAuth = useCallback(() => {
-    clearAuthSession();
     flushSync(() => {
-      setToken(null);
       setUser(null);
     });
     queryClient.clear();
@@ -60,21 +50,12 @@ export function AuthProvider({ children }) {
     let cancelled = false;
 
     async function hydrate() {
-      const existing = getToken();
-      if (!existing) {
-        if (!cancelled) setIsLoading(false);
-        return;
-      }
-
       try {
+        await getCsrfCookie();
         const { data } = await apiClient.get('/auth/me');
         if (cancelled) return;
         const nextUser = data?.data ?? null;
-        setAuthUser(nextUser);
-        flushSync(() => {
-          setUser(nextUser);
-          setToken(existing);
-        });
+        setUser(nextUser);
       } catch {
         if (cancelled) return;
         clearClientAuth();
@@ -90,42 +71,25 @@ export function AuthProvider({ children }) {
   }, [clearClientAuth]);
 
   const login = useCallback(async (email, password) => {
+    await getCsrfCookie();
     const { data } = await apiClient.post('/auth/login', { email, password });
-    const nextToken = data?.data?.token;
     const nextUser = data?.data?.user ?? null;
 
-    if (!nextToken) {
-      throw new Error('Login succeeded but no token was returned.');
-    }
-
-    setAuthSession(nextToken, nextUser);
-    flushSync(() => {
-      setToken(nextToken);
-      setUser(nextUser);
-    });
-    return { user: nextUser, token: nextToken };
+    setUser(nextUser);
+    return { user: nextUser };
   }, []);
 
   const register = useCallback(async (payload) => {
+    await getCsrfCookie();
     const { data } = await apiClient.post('/auth/register', payload);
-    const nextToken = data?.data?.token;
     const nextUser = data?.data?.user ?? null;
-
-    if (!nextToken) {
-      throw new Error('Registration succeeded but no token was returned.');
-    }
-
-    setAuthSession(nextToken, nextUser);
-    flushSync(() => {
-      setToken(nextToken);
-      setUser(nextUser);
-    });
-    return { user: nextUser, token: nextToken };
+    setUser(nextUser);
+    return { user: nextUser };
   }, []);
 
   const logout = useCallback(async () => {
     try {
-      if (getToken()) {
+      if (user) {
         await apiClient.post('/auth/logout');
       }
     } catch {
@@ -134,24 +98,22 @@ export function AuthProvider({ children }) {
       clearClientAuth();
       navigate('/auth', { replace: true });
     }
-  }, [clearClientAuth, navigate]);
+  }, [clearClientAuth, navigate, user]);
 
   const value = useMemo(
     () => ({
       user,
-      token,
-      isAuthenticated: Boolean(token),
+      isAuthenticated: Boolean(user),
       isLoading,
       login,
       logout,
       register,
       updateCurrentUser: (nextUser) => {
-        setAuthUser(nextUser);
         setUser(nextUser);
       },
       extractErrorMessage,
     }),
-    [user, token, isLoading, login, logout, register]
+    [user, isLoading, login, logout, register]
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
