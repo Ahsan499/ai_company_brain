@@ -28,6 +28,8 @@ class Settings(BaseSettings):
     google_credentials_path: str = "secrets/credentials.json"
     google_token_path: str = "secrets/token.json"
 
+    slack_bot_token: str = ""
+
     model_config = SettingsConfigDict(
         env_file=".env",
         env_file_encoding="utf-8",
