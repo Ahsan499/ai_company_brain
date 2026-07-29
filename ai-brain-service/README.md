@@ -40,9 +40,12 @@ Expected response shape:
 }
 ```
 
-## Ingestion (Step D3)
+## Query / RAG (Step D4)
 
-- `POST /ingestion/drive/file/{file_id}`
-- `POST /ingestion/drive/folder` with body `{"folder_id": null}` (optional `max_files`)
-- `GET /ingestion/status`
-- Temporary: `GET /ingestion/debug/search?q=...`
+```bash
+curl -X POST http://127.0.0.1:8001/query \
+  -H "Content-Type: application/json" \
+  -d '{"question":"What does the workload report say?","n_results":5}'
+```
+
+Requires `ANTHROPIC_API_KEY` in `.env`.
