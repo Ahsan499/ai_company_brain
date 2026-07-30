@@ -1,8 +1,8 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { motion } from 'framer-motion';
 import { Mail, Lock, Eye, EyeOff } from 'lucide-react';
-import { Link, Navigate, useNavigate } from 'react-router-dom';
+import { Link, Navigate, useNavigate, useSearchParams } from 'react-router-dom';
 import Button from '../../components/ui/Button';
 import Input from '../../components/ui/Input';
 import Checkbox from '../../components/ui/Checkbox';
@@ -12,9 +12,17 @@ import { useAuth } from '../../context/AuthContext';
 const Login = () => {
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  const [oauthLoading, setOauthLoading] = useState('');
   const [formError, setFormError] = useState('');
-  const { login, extractErrorMessage, isAuthenticated, isLoading: authLoading } = useAuth();
+  const {
+    login,
+    signInWithOAuth,
+    extractErrorMessage,
+    isAuthenticated,
+    isLoading: authLoading,
+  } = useAuth();
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
 
   const {
     register,
@@ -28,6 +36,15 @@ const Login = () => {
     },
   });
 
+  useEffect(() => {
+    if (searchParams.get('error') !== 'oauth_failed') return;
+
+    setFormError('Sign-in failed, please try again.');
+    const next = new URLSearchParams(searchParams);
+    next.delete('error');
+    setSearchParams(next, { replace: true });
+  }, [searchParams, setSearchParams]);
+
   const onSubmit = async ({ email, password }) => {
     setFormError('');
     setIsLoading(true);
@@ -38,6 +55,17 @@ const Login = () => {
       setFormError(extractErrorMessage(error, 'Invalid credentials.'));
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const onOAuth = async (provider) => {
+    setFormError('');
+    setOauthLoading(provider);
+    try {
+      await signInWithOAuth(provider);
+    } catch (error) {
+      setFormError(extractErrorMessage(error, 'Sign-in failed, please try again.'));
+      setOauthLoading('');
     }
   };
 
@@ -159,6 +187,9 @@ const Login = () => {
               variant="secondary"
               type="button"
               className="w-full flex items-center justify-center gap-2 min-h-11"
+              onClick={() => onOAuth('google')}
+              isLoading={oauthLoading === 'google'}
+              disabled={Boolean(oauthLoading) || isLoading}
             >
               <svg className="h-5 w-5 shrink-0" viewBox="0 0 24 24">
                 <path
@@ -184,6 +215,9 @@ const Login = () => {
               variant="secondary"
               type="button"
               className="w-full flex items-center justify-center gap-2 min-h-11"
+              onClick={() => onOAuth('microsoft')}
+              isLoading={oauthLoading === 'microsoft'}
+              disabled={Boolean(oauthLoading) || isLoading}
             >
               <svg className="h-5 w-5 shrink-0" viewBox="0 0 21 21">
                 <path fill="#f25022" d="M0 0h10v10H0z"/>

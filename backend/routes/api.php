@@ -10,6 +10,7 @@ use App\Http\Controllers\Api\MeetingController;
 use App\Http\Controllers\Api\OrganizationController;
 use App\Http\Controllers\Api\ProjectController;
 use App\Http\Controllers\Api\ReportsController;
+use App\Http\Controllers\Api\SocialAuthController;
 use App\Http\Controllers\Api\TaskController;
 use App\Http\Controllers\Api\TeamController;
 use App\Http\Controllers\Api\TimeEntryController;
@@ -26,6 +27,14 @@ Route::prefix('v1')->group(function () {
     Route::prefix('auth')->group(function () {
         Route::post('register', [AuthController::class, 'register']);
         Route::post('login', [AuthController::class, 'login']);
+
+        // OAuth (SPA): redirect returns JSON URL; callback is full-browser and needs sessions.
+        Route::middleware('web')
+            ->whereIn('provider', ['google', 'microsoft'])
+            ->group(function () {
+                Route::get('{provider}/redirect', [SocialAuthController::class, 'redirect']);
+                Route::get('{provider}/callback', [SocialAuthController::class, 'callback']);
+            });
 
         Route::middleware('auth:sanctum')->group(function () {
             Route::post('logout', [AuthController::class, 'logout']);

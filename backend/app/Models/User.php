@@ -81,12 +81,16 @@ class User extends Authenticatable
         'manager_id',
         'name',
         'email',
+        'google_id',
+        'microsoft_id',
         'initials',
+        'avatar_url',
         'phone',
         'location',
         'status',
         'password',
         'last_login_at',
+        'email_verified_at',
     ];
 
     protected $hidden = [

@@ -79,6 +79,22 @@ export function AuthProvider({ children }) {
     return { user: nextUser };
   }, []);
 
+  const signInWithOAuth = useCallback(async (provider) => {
+    const allowed = provider === 'google' || provider === 'microsoft';
+    if (!allowed) {
+      throw new Error('Unsupported OAuth provider.');
+    }
+
+    await getCsrfCookie();
+    const { data } = await apiClient.get(`/auth/${provider}/redirect`);
+    const url = data?.data?.url;
+    if (!url) {
+      throw new Error('OAuth redirect URL was not returned.');
+    }
+
+    window.location.href = url;
+  }, []);
+
   const register = useCallback(async (payload) => {
     await getCsrfCookie();
     const { data } = await apiClient.post('/auth/register', payload);
@@ -108,12 +124,13 @@ export function AuthProvider({ children }) {
       login,
       logout,
       register,
+      signInWithOAuth,
       updateCurrentUser: (nextUser) => {
         setUser(nextUser);
       },
       extractErrorMessage,
     }),
-    [user, isLoading, login, logout, register]
+    [user, isLoading, login, logout, register, signInWithOAuth]
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
