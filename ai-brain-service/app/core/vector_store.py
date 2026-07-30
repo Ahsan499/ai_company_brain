@@ -63,7 +63,12 @@ class VectorStore:
         for meta in result.get("metadatas") or []:
             if not isinstance(meta, dict):
                 continue
-            file_name = str(meta.get("file_name") or "unknown")
+            channel_name = meta.get("channel_name")
+            file_name = str(
+                meta.get("file_name")
+                or (f"#{channel_name}" if channel_name else "")
+                or "unknown"
+            )
             source = str(meta.get("source") or "unknown")
             by_file[file_name] = by_file.get(file_name, 0) + 1
             by_source[source] = by_source.get(source, 0) + 1

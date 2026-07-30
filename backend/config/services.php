@@ -35,4 +35,8 @@ return [
         ],
     ],
 
+    'ai_brain' => [
+        'url' => env('AI_BRAIN_URL', 'http://127.0.0.1:8001'),
+    ],
+
 ];

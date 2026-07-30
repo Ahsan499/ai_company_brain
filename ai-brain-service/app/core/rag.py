@@ -23,16 +23,24 @@ def _build_context_and_sources(raw: Dict[str, Any]) -> Tuple[str, List[Dict[str,
 
     for index, text in enumerate(documents):
         meta = metadatas[index] if index < len(metadatas) and isinstance(metadatas[index], dict) else {}
-        file_name = str(meta.get("file_name") or "unknown")
-        file_id = str(meta.get("file_id") or "")
+        source_type = str(meta.get("source") or "unknown")
+        channel_name = str(meta.get("channel_name") or "")
+        file_name = str(
+            meta.get("file_name")
+            or (f"#{channel_name}" if channel_name else "")
+            or "unknown"
+        )
+        file_id = str(meta.get("file_id") or meta.get("channel_id") or "")
         web_view_link = str(meta.get("web_view_link") or "")
         chunk_text = text or ""
 
         context_parts.append(f"[Source {index + 1}: {file_name}]\n{chunk_text}")
         sources.append(
             {
+                "source": source_type,
                 "file_name": file_name,
                 "file_id": file_id,
+                "channel_name": channel_name,
                 "web_view_link": web_view_link,
                 "chunk_preview": chunk_text[:150],
             }
@@ -47,8 +55,12 @@ def answer_question(
     question: str,
     vector_store: VectorStore,
     n_results: int = 5,
+    skip_llm: bool = False,
 ) -> Dict[str, Any]:
-    """Retrieve relevant chunks and generate a grounded Claude answer with citations."""
+    """Retrieve relevant chunks and generate a grounded Claude answer with citations.
+
+    When skip_llm=True, returns retrieved sources only (no Anthropic call) — useful for UI testing.
+    """
     started = time.perf_counter()
     settings = get_settings()
     cleaned = (question or "").strip()
@@ -59,6 +71,7 @@ def answer_question(
             "answer": "Please provide a non-empty question.",
             "sources": [],
             "chunks_used": 0,
+            "mode": "empty",
         }
 
     collection = settings.chroma_collection
@@ -75,6 +88,7 @@ def answer_question(
             "answer": "No relevant documents found. The knowledge base is empty — ingest files first.",
             "sources": [],
             "chunks_used": 0,
+            "mode": "empty",
         }
 
     raw = vector_store.query(
@@ -97,6 +111,29 @@ def answer_question(
             "answer": "No relevant documents found for that question.",
             "sources": [],
             "chunks_used": 0,
+            "mode": "empty",
+        }
+
+    if skip_llm:
+        elapsed_ms = int((time.perf_counter() - started) * 1000)
+        logger.info(
+            "RAG retrieval_only question=%r chunks_retrieved=%s elapsed_ms=%s sources=%s",
+            cleaned,
+            chunks_used,
+            elapsed_ms,
+            source_names,
+        )
+        names = ", ".join(source_names) if source_names else "none"
+        return {
+            "question": cleaned,
+            "answer": (
+                "Retrieval-only preview (no AI credits used). "
+                f"Found {chunks_used} relevant chunk(s) from: {names}. "
+                "Click a source chip below to see the short preview."
+            ),
+            "sources": sources,
+            "chunks_used": chunks_used,
+            "mode": "retrieval_only",
         }
 
     answer = ask_claude_rag(
@@ -120,4 +157,5 @@ def answer_question(
         "answer": answer,
         "sources": sources,
         "chunks_used": chunks_used,
+        "mode": "rag",
     }

@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\Api\AuditLogController;
 use App\Http\Controllers\Api\AuthController;
+use App\Http\Controllers\Api\BrainController;
 use App\Http\Controllers\Api\DepartmentController;
 use App\Http\Controllers\Api\FileController;
 use App\Http\Controllers\Api\FolderController;
@@ -106,5 +107,13 @@ Route::prefix('v1')->group(function () {
         });
 
         Route::get('audit-logs', [AuditLogController::class, 'index']);
+
+        Route::prefix('brain')->group(function () {
+            Route::get('health', [BrainController::class, 'health']);
+            Route::get('status', [BrainController::class, 'status']);
+            Route::post('query', [BrainController::class, 'query']);
+            Route::post('ingestion/drive/folder', [BrainController::class, 'ingestDriveFolder']);
+            Route::post('ingestion/slack/all', [BrainController::class, 'ingestSlackAll']);
+        });
     });
 });

@@ -25,6 +25,7 @@ import Meetings from './pages/dashboard/Meetings'
 import TimeTracking from './pages/dashboard/TimeTracking'
 import TimeTrackingReports from './pages/dashboard/TimeTrackingReports'
 import Files from './pages/dashboard/Files'
+import Knowledge from './pages/dashboard/Knowledge'
 import Reports from './pages/dashboard/Reports'
 import AuditLogs from './pages/dashboard/AuditLogs'
 import Settings from './pages/dashboard/Settings'
@@ -240,6 +241,14 @@ function App() {
               element={
                 <DashboardLayout>
                   <Files />
+                </DashboardLayout>
+              }
+            />
+            <Route
+              path="/dashboard/knowledge"
+              element={
+                <DashboardLayout>
+                  <Knowledge />
                 </DashboardLayout>
               }
             />

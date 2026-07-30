@@ -18,6 +18,10 @@ router = APIRouter(prefix="/query", tags=["query"])
 class QueryRequest(BaseModel):
     question: str = Field(..., min_length=1)
     n_results: int = Field(default=5, ge=1, le=20)
+    skip_llm: bool = Field(
+        default=False,
+        description="If true, return retrieved sources only without calling Anthropic.",
+    )
 
 
 @router.post("")
@@ -31,6 +35,7 @@ def query_knowledge(payload: QueryRequest) -> Dict[str, Any]:
             question=payload.question,
             vector_store=store,
             n_results=payload.n_results,
+            skip_llm=payload.skip_llm,
         )
     except ValueError as exc:
         # Typically missing ANTHROPIC_API_KEY

@@ -82,6 +82,7 @@ def ingest_slack_channel(
         "source_id": f"slack_{channel_id}",
         "channel_id": channel_id,
         "channel_name": channel_name,
+        "file_name": f"#{channel_name}",
         "message_count": len(messages),
         "ingested_at": datetime.now(tz=timezone.utc).isoformat(),
     }
