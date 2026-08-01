@@ -67,7 +67,7 @@ class TaskController extends Controller
 
     public function update(UpdateTaskRequest $request, Task $task): JsonResponse
     {
-        $task = $this->taskService->update($task, $request->validated());
+        $task = $this->taskService->update($task, $request->validated(), $request->user());
 
         return $this->successResponse(
             new TaskResource($task),
@@ -86,7 +86,11 @@ class TaskController extends Controller
 
     public function updateStatus(UpdateTaskStatusRequest $request, Task $task): JsonResponse
     {
-        $task = $this->taskService->updateStatus($task, $request->validated('status'));
+        $task = $this->taskService->updateStatus(
+            $task,
+            $request->validated('status'),
+            $request->user()
+        );
 
         return $this->successResponse(
             new TaskResource($task),

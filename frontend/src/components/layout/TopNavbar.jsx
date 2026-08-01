@@ -11,6 +11,7 @@ import {
 } from 'lucide-react';
 import ProfileDropdown from '../profile/ProfileDropdown';
 import { useAuth } from '../../context/AuthContext';
+import { useUnreadCount } from '../../hooks/useNotifications';
 
 const IconButton = ({ children, className = '', label, ...props }) => (
   <button
@@ -36,6 +37,7 @@ const TopNavbar = ({ onMenuClick, onNotificationsClick, onSearchClick }) => {
   const [profileOpen, setProfileOpen] = useState(false);
   const profileTriggerRef = useRef(null);
   const { user } = useAuth();
+  const { data: unreadCount = 0 } = useUnreadCount();
 
   const isMac =
     typeof navigator !== 'undefined' &&
@@ -95,10 +97,14 @@ const TopNavbar = ({ onMenuClick, onNotificationsClick, onSearchClick }) => {
       <div className="flex items-center gap-1 sm:gap-1.5 shrink-0">
         <IconButton label="Notifications" onClick={onNotificationsClick}>
           <Bell size={17} strokeWidth={1.85} />
-          <span className="absolute top-2 right-2 flex h-2 w-2">
-            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-error/80 opacity-70" />
-            <span className="relative inline-flex rounded-full h-2 w-2 bg-error ring-2 ring-white" />
-          </span>
+          {unreadCount > 0 && (
+            <span className="absolute top-1.5 right-1.5 flex h-4 min-w-4 items-center justify-center">
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-error/80 opacity-50" />
+              <span className="relative inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-error px-1 text-[9px] font-bold text-white ring-2 ring-white">
+                {unreadCount > 9 ? '9+' : unreadCount}
+              </span>
+            </span>
+          )}
         </IconButton>
 
         <IconButton label="Messages" className="hidden sm:inline-flex">

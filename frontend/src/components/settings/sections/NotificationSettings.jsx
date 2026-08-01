@@ -1,10 +1,14 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { Check } from 'lucide-react';
 import Button from '../../ui/Button';
 import SettingsSection from '../SettingsSection';
 import ToggleRow from '../ToggleRow';
 import { NOTIFICATION_GROUPS } from '../settingsData';
+import {
+  useNotificationPreferences,
+  useUpdateNotificationPreferences,
+} from '../../../hooks/useSettings';
 
 const buildDefaults = () => {
   const map = {};
@@ -16,9 +20,44 @@ const buildDefaults = () => {
   return map;
 };
 
+const prefsToUi = (apiPrefs) => {
+  if (!apiPrefs) return buildDefaults();
+  return {
+    email: Boolean(apiPrefs.email ?? apiPrefs.email_enabled),
+    push: Boolean(apiPrefs.push ?? apiPrefs.push_enabled),
+    task_assigned: Boolean(apiPrefs.task_assigned ?? apiPrefs.taskAssigned),
+    task_completed: Boolean(apiPrefs.task_completed ?? apiPrefs.taskCompleted),
+    meeting_reminders: Boolean(apiPrefs.meeting_reminders ?? apiPrefs.meetingReminders),
+    mentions: Boolean(apiPrefs.mentions),
+    weekly_digest: Boolean(apiPrefs.weekly_digest ?? apiPrefs.weeklyDigest),
+  };
+};
+
 const NotificationSettings = () => {
+  const { data: apiPrefs, isLoading } = useNotificationPreferences();
+  const updatePrefs = useUpdateNotificationPreferences();
   const [prefs, setPrefs] = useState(buildDefaults);
   const [saved, setSaved] = useState(false);
+
+  useEffect(() => {
+    if (apiPrefs) {
+      setPrefs(prefsToUi(apiPrefs));
+    }
+  }, [apiPrefs]);
+
+  const handleSave = async () => {
+    await updatePrefs.mutateAsync({
+      email: prefs.email,
+      push: prefs.push,
+      task_assigned: prefs.task_assigned,
+      task_completed: prefs.task_completed,
+      meeting_reminders: prefs.meeting_reminders,
+      mentions: prefs.mentions,
+      weekly_digest: prefs.weekly_digest,
+    });
+    setSaved(true);
+    window.setTimeout(() => setSaved(false), 2000);
+  };
 
   return (
     <SettingsSection
@@ -29,10 +68,8 @@ const NotificationSettings = () => {
           type="button"
           variant="primary"
           className="h-10 rounded-xl"
-          onClick={() => {
-            setSaved(true);
-            window.setTimeout(() => setSaved(false), 2000);
-          }}
+          disabled={isLoading || updatePrefs.isPending}
+          onClick={handleSave}
         >
           <AnimatePresence mode="wait">
             {saved ? (
@@ -53,9 +90,6 @@ const NotificationSettings = () => {
         </Button>
       }
     >
-      <p className="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
-        Notification preferences are currently local UI-only and do not persist server-side yet.
-      </p>
       <div className="space-y-8">
         {NOTIFICATION_GROUPS.map((group) => (
           <div key={group.id}>

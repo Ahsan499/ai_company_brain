@@ -105,6 +105,7 @@ class Meeting extends Model
         'location',
         'join_url',
         'recurring',
+        'reminder_sent_at',
     ];
 
     protected function casts(): array
@@ -114,6 +115,7 @@ class Meeting extends Model
             'duration_minutes' => 'integer',
             'status' => MeetingStatus::class,
             'type' => MeetingType::class,
+            'reminder_sent_at' => 'datetime',
         ];
     }
 

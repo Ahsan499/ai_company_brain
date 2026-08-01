@@ -6,10 +6,13 @@ import NotificationSearch from './NotificationSearch';
 import NotificationTabs from './NotificationTabs';
 import NotificationCard from './NotificationCard';
 import EmptyNotifications from './EmptyNotifications';
+import { filterNotifications } from './notificationData';
 import {
-  DUMMY_NOTIFICATIONS,
-  filterNotifications,
-} from './notificationData';
+  useMarkAllAsRead,
+  useMarkAsRead,
+  useNotifications,
+  useUnreadCount,
+} from '../../hooks/useNotifications';
 
 const IconAction = ({ label, onClick, children, className = '' }) => (
   <button
@@ -34,12 +37,13 @@ const NotificationDrawer = ({ open, onClose }) => {
   const navigate = useNavigate();
   const [tab, setTab] = useState('all');
   const [query, setQuery] = useState('');
-  const [items, setItems] = useState(DUMMY_NOTIFICATIONS);
 
-  const unreadCount = useMemo(
-    () => items.filter((n) => n.unread).length,
-    [items]
-  );
+  const { data, isLoading } = useNotifications({ perPage: 40 });
+  const { data: unreadCount = 0 } = useUnreadCount();
+  const markAsRead = useMarkAsRead();
+  const markAllAsRead = useMarkAllAsRead();
+
+  const items = data?.data ?? [];
 
   const filtered = useMemo(
     () => filterNotifications(items, { tab, query }),
@@ -59,14 +63,14 @@ const NotificationDrawer = ({ open, onClose }) => {
     };
   }, [open, onClose]);
 
-  const markAllRead = () => {
-    setItems((prev) => prev.map((n) => ({ ...n, unread: false })));
-  };
-
-  const markOneRead = (notification) => {
-    setItems((prev) =>
-      prev.map((n) => (n.id === notification.id ? { ...n, unread: false } : n))
-    );
+  const handleClick = (notification) => {
+    if (notification.unread) {
+      markAsRead.mutate(notification.id);
+    }
+    if (notification.url) {
+      onClose?.();
+      navigate(notification.url);
+    }
   };
 
   return (
@@ -100,7 +104,6 @@ const NotificationDrawer = ({ open, onClose }) => {
             exit={{ x: '100%' }}
             transition={{ type: 'spring', stiffness: 340, damping: 36 }}
           >
-            {/* Header */}
             <div className="shrink-0 border-b border-border/40 bg-gradient-to-b from-white via-white to-slate-50/40 px-4 sm:px-5 pt-5 pb-4">
               <div className="flex items-start justify-between gap-3">
                 <div className="flex items-center gap-3 min-w-0">
@@ -135,19 +138,27 @@ const NotificationDrawer = ({ open, onClose }) => {
                 <div className="flex items-center gap-0.5 shrink-0">
                   <button
                     type="button"
-                    onClick={markAllRead}
+                    onClick={() => markAllAsRead.mutate()}
+                    disabled={unreadCount === 0 || markAllAsRead.isPending}
                     className="
                       inline-flex items-center gap-1.5
                       rounded-xl px-2.5 py-2 text-[11.5px] font-semibold text-primary
                       hover:bg-primary/[0.06] transition-colors
                       focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/25
+                      disabled:opacity-40
                     "
                     title="Mark all as read"
                   >
                     <CheckCheck size={14} strokeWidth={2.25} />
                     <span className="hidden sm:inline">Mark all</span>
                   </button>
-                  <IconAction label="Notification settings">
+                  <IconAction
+                    label="Notification settings"
+                    onClick={() => {
+                      onClose?.();
+                      navigate('/dashboard/settings/notifications');
+                    }}
+                  >
                     <Settings size={15} strokeWidth={1.85} />
                   </IconAction>
                   <IconAction label="Close" onClick={onClose}>
@@ -162,9 +173,10 @@ const NotificationDrawer = ({ open, onClose }) => {
               </div>
             </div>
 
-            {/* List */}
             <div className="flex-1 overflow-y-auto dashboard-scrollbar px-3.5 sm:px-4 py-3.5 space-y-2 bg-gradient-to-b from-slate-50/30 to-transparent">
-              {filtered.length === 0 ? (
+              {isLoading ? (
+                <p className="px-2 py-8 text-center text-sm text-secondaryText">Loading…</p>
+              ) : filtered.length === 0 ? (
                 <EmptyNotifications
                   onBack={() => {
                     onClose?.();
@@ -177,13 +189,12 @@ const NotificationDrawer = ({ open, onClose }) => {
                     key={n.id}
                     notification={n}
                     delay={Math.min(i * 0.035, 0.28)}
-                    onClick={markOneRead}
+                    onClick={handleClick}
                   />
                 ))
               )}
             </div>
 
-            {/* Footer */}
             <div className="shrink-0 border-t border-border/40 p-4 sm:p-5 bg-gradient-to-t from-slate-50/95 via-white/90 to-white/70 backdrop-blur-md">
               <motion.button
                 type="button"

@@ -6,27 +6,40 @@ import NotificationSearch from '../../components/notifications/NotificationSearc
 import NotificationTabs from '../../components/notifications/NotificationTabs';
 import NotificationCard from '../../components/notifications/NotificationCard';
 import EmptyNotifications from '../../components/notifications/EmptyNotifications';
-import {
-  DUMMY_NOTIFICATIONS,
-  filterNotifications,
-} from '../../components/notifications/notificationData';
+import { filterNotifications } from '../../components/notifications/notificationData';
 import Button from '../../components/ui/Button';
+import {
+  useMarkAllAsRead,
+  useMarkAsRead,
+  useNotifications,
+  useUnreadCount,
+} from '../../hooks/useNotifications';
 
 const Notifications = () => {
   const navigate = useNavigate();
   const [tab, setTab] = useState('all');
   const [query, setQuery] = useState('');
-  const [items, setItems] = useState(DUMMY_NOTIFICATIONS);
 
-  const unreadCount = useMemo(
-    () => items.filter((n) => n.unread).length,
-    [items]
-  );
+  const { data, isLoading } = useNotifications({ perPage: 50 });
+  const { data: unreadCount = 0 } = useUnreadCount();
+  const markAsRead = useMarkAsRead();
+  const markAllAsRead = useMarkAllAsRead();
+
+  const items = data?.data ?? [];
 
   const filtered = useMemo(
     () => filterNotifications(items, { tab, query }),
     [items, tab, query]
   );
+
+  const handleClick = (notification) => {
+    if (notification.unread) {
+      markAsRead.mutate(notification.id);
+    }
+    if (notification.url) {
+      navigate(notification.url);
+    }
+  };
 
   return (
     <div className="mx-auto max-w-3xl space-y-5 sm:space-y-6">
@@ -60,7 +73,8 @@ const Notifications = () => {
             type="button"
             variant="secondary"
             className="h-10 rounded-xl gap-2 text-[13px] font-semibold bg-white/85 backdrop-blur-sm shadow-sm"
-            onClick={() => setItems((prev) => prev.map((n) => ({ ...n, unread: false })))}
+            disabled={unreadCount === 0 || markAllAsRead.isPending}
+            onClick={() => markAllAsRead.mutate()}
           >
             <CheckCheck size={15} strokeWidth={2.1} />
             Mark all as read
@@ -70,6 +84,7 @@ const Notifications = () => {
             variant="secondary"
             className="h-10 w-10 rounded-xl p-0 justify-center bg-white/85 backdrop-blur-sm shadow-sm"
             aria-label="Settings"
+            onClick={() => navigate('/dashboard/settings/notifications')}
           >
             <Settings size={15} strokeWidth={1.85} />
           </Button>
@@ -101,7 +116,9 @@ const Notifications = () => {
           min-h-[380px]
         "
       >
-        {filtered.length === 0 ? (
+        {isLoading ? (
+          <p className="py-10 text-center text-sm text-secondaryText">Loading…</p>
+        ) : filtered.length === 0 ? (
           <EmptyNotifications onBack={() => navigate('/dashboard')} />
         ) : (
           filtered.map((n, i) => (
@@ -109,13 +126,7 @@ const Notifications = () => {
               key={n.id}
               notification={n}
               delay={Math.min(i * 0.03, 0.24)}
-              onClick={(notification) =>
-                setItems((prev) =>
-                  prev.map((item) =>
-                    item.id === notification.id ? { ...item, unread: false } : item
-                  )
-                )
-              }
+              onClick={handleClick}
             />
           ))
         )}

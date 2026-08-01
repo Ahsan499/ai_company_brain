@@ -15,7 +15,10 @@ use Illuminate\Support\Facades\DB;
 
 class TaskService
 {
-    public function __construct(protected ProjectService $projectService) {}
+    public function __construct(
+        protected ProjectService $projectService,
+        protected TaskNotificationDispatcher $taskNotificationDispatcher,
+    ) {}
 
     public function index(Request $request, User $actor): LengthAwarePaginator
     {
@@ -86,13 +89,21 @@ class TaskService
 
             $this->projectService->recalculateProgress($project);
 
-            return $this->show($task);
+            $shown = $this->show($task);
+            $this->taskNotificationDispatcher->notifyAssigneeIfNeeded($shown);
+
+            return $shown;
         });
     }
 
-    public function update(Task $task, array $data): Task
+    public function update(Task $task, array $data, ?User $actor = null): Task
     {
-        return DB::transaction(function () use ($task, $data) {
+        return DB::transaction(function () use ($task, $data, $actor) {
+            $previousAssigneeId = $task->assignee_id;
+            $previousStatus = $task->status instanceof TaskStatus
+                ? $task->status->value
+                : (string) $task->status;
+
             $task->fill([
                 'project_id' => $data['project_id'] ?? $task->project_id,
                 'organization_id' => $data['organization_id'] ?? $task->organization_id,
@@ -109,19 +120,49 @@ class TaskService
                 $this->projectService->recalculateProgress($task->project);
             }
 
-            return $this->show($task->fresh());
+            $shown = $this->show($task->fresh());
+
+            if (array_key_exists('assignee_id', $data)) {
+                $this->taskNotificationDispatcher->notifyAssigneeIfNeeded($shown, $previousAssigneeId);
+            }
+
+            $newStatus = $shown->status instanceof TaskStatus
+                ? $shown->status->value
+                : (string) $shown->status;
+
+            $this->taskNotificationDispatcher->notifyCompletedIfNeeded(
+                $shown,
+                $previousStatus,
+                $newStatus,
+                $actor
+            );
+
+            return $shown;
         });
     }
 
-    public function updateStatus(Task $task, string $status): Task
+    public function updateStatus(Task $task, string $status, ?User $actor = null): Task
     {
+        $previousStatus = $task->status instanceof TaskStatus
+            ? $task->status->value
+            : (string) $task->status;
+
         $task->forceFill(['status' => $status])->save();
 
         if ($task->project) {
             $this->projectService->recalculateProgress($task->project);
         }
 
-        return $this->show($task->fresh());
+        $shown = $this->show($task->fresh());
+
+        $this->taskNotificationDispatcher->notifyCompletedIfNeeded(
+            $shown,
+            $previousStatus,
+            $status,
+            $actor
+        );
+
+        return $shown;
     }
 
     public function destroy(Task $task): void

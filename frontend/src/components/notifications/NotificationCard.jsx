@@ -22,11 +22,18 @@ const CATEGORY_ICONS = {
   mention: AtSign,
 };
 
+const EVENT_ICONS = {
+  task_assigned: UserPlus,
+  task_completed: CheckCircle2,
+  meeting_reminder: CalendarDays,
+  weekly_digest: Settings,
+};
+
 const NotificationCard = ({ notification, onClick, delay = 0 }) => {
-  const { title, description, time, unread, category, avatar } = notification;
+  const { title, description, time, unread, category, avatar, event } = notification;
 
   const meta = NOTIFICATION_CATEGORIES[category] || NOTIFICATION_CATEGORIES.system;
-  const Icon = CATEGORY_ICONS[category] || UserPlus;
+  const Icon = EVENT_ICONS[event] || CATEGORY_ICONS[category] || UserPlus;
   const avatarTone = AVATAR_TONES[avatar] || AVATAR_TONES.SY;
 
   return (

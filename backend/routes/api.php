@@ -7,6 +7,8 @@ use App\Http\Controllers\Api\DepartmentController;
 use App\Http\Controllers\Api\FileController;
 use App\Http\Controllers\Api\FolderController;
 use App\Http\Controllers\Api\MeetingController;
+use App\Http\Controllers\Api\NotificationController;
+use App\Http\Controllers\Api\NotificationPreferenceController;
 use App\Http\Controllers\Api\OrganizationController;
 use App\Http\Controllers\Api\ProjectController;
 use App\Http\Controllers\Api\ReportsController;
@@ -116,6 +118,14 @@ Route::prefix('v1')->group(function () {
         });
 
         Route::get('audit-logs', [AuditLogController::class, 'index']);
+
+        Route::get('notifications/unread-count', [NotificationController::class, 'unreadCount']);
+        Route::patch('notifications/read-all', [NotificationController::class, 'markAllAsRead']);
+        Route::patch('notifications/{id}/read', [NotificationController::class, 'markAsRead']);
+        Route::get('notifications', [NotificationController::class, 'index']);
+
+        Route::get('settings/notification-preferences', [NotificationPreferenceController::class, 'show']);
+        Route::patch('settings/notification-preferences', [NotificationPreferenceController::class, 'update']);
 
         Route::prefix('brain')->group(function () {
             Route::get('health', [BrainController::class, 'health']);
